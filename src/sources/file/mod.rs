@@ -12,8 +12,9 @@ use file_source::{
     FileServer, Fingerprinter,
 };
 use futures::{
-    compat::{Compat01As03Sink, Future01CompatExt},
+    compat::{Compat, Compat01As03, Compat01As03Sink, Future01CompatExt},
     future::{FutureExt, TryFutureExt},
+    stream::StreamExt,
 };
 use futures01::{future, Future, Sink, Stream};
 use regex::bytes::Regex;
@@ -274,17 +275,23 @@ pub fn file_source(
 
         let messages: Box<dyn Stream<Item = (Bytes, String), Error = ()> + Send> =
             if let Some(ref multiline_config) = multiline_config {
-                Box::new(LineAgg::new(
-                    rx,
-                    multiline_config.try_into().unwrap(), // validated in build
+                Box::new(Compat::new(
+                    LineAgg::new(
+                        Compat01As03::new(rx).map(|val| val.unwrap()),
+                        multiline_config.try_into().unwrap(), // validated in build
+                    )
+                    .map(Ok),
                 ))
             } else if let Some(msi) = message_start_indicator {
-                Box::new(LineAgg::new(
-                    rx,
-                    line_agg::Config::for_legacy(
-                        Regex::new(&msi).unwrap(), // validated in build
-                        multi_line_timeout,
-                    ),
+                Box::new(Compat::new(
+                    LineAgg::new(
+                        Compat01As03::new(rx).map(|val| val.unwrap()),
+                        line_agg::Config::for_legacy(
+                            Regex::new(&msi).unwrap(), // validated in build
+                            multi_line_timeout,
+                        ),
+                    )
+                    .map(Ok),
                 ))
             } else {
                 Box::new(rx)
