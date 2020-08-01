@@ -1,5 +1,5 @@
 use bytes05::{Bytes, BytesMut};
-use futures::Stream;
+use futures::{Stream, StreamExt};
 use pin_project::pin_project;
 use regex::bytes::Regex;
 use serde::{Deserialize, Serialize};
@@ -73,22 +73,15 @@ impl Config {
     }
 }
 
+/// Line aggregating stream.
 #[pin_project(project = LineAggProj)]
-pub(super) struct LineAgg<T, K> {
+pub struct LineAgg<T, K> {
     /// The stream from which we read the lines.
     #[pin]
     inner: T,
 
-    pinned: Pinned<K>,
-}
-
-struct Pinned<K> {
-    /// Configuration parameters to use.
-    config: Config,
-
-    /// Line per key.
-    /// Key is usually a filename or other line source identifier.
-    buffers: HashMap<K, BytesMut>,
+    /// The core logic.
+    logic: Logic<K>,
 
     /// Stashed lines. When line aggreation results in more than one line being
     /// emitted, we have to stash lines and return them into the stream after
@@ -100,28 +93,41 @@ struct Pinned<K> {
     /// and just flush all the buffered data.
     draining: Option<Vec<(Bytes, K)>>,
 
-    /// A queue of key timeouts.
-    timeouts: DelayQueue<K>,
-
     /// A queue of keys with expired timeouts.
     expired: VecDeque<K>,
 }
 
+/// Core logic of line aggregation.
+pub struct Logic<K> {
+    /// Configuration parameters to use.
+    config: Config,
+
+    /// Line per key.
+    /// Key is usually a filename or other line source identifier.
+    buffers: HashMap<K, BytesMut>,
+
+    /// A queue of key timeouts.
+    timeouts: DelayQueue<K>,
+}
+
 impl<T, K> LineAgg<T, K>
 where
+    T: Stream<Item = (Bytes, K)> + Unpin,
     K: Hash + Eq + Clone,
 {
     pub(super) fn new(inner: T, config: Config) -> Self {
-        let pinned = Pinned {
+        let logic = Logic {
             config,
-
-            draining: None,
-            stashed: None,
             buffers: HashMap::new(),
             timeouts: DelayQueue::new(),
-            expired: VecDeque::new(),
         };
-        Self { inner, pinned }
+        Self {
+            inner,
+            draining: None,
+            stashed: None,
+            logic,
+            expired: VecDeque::new(),
+        }
     }
 }
 
@@ -137,19 +143,19 @@ where
         let mut this = self.project();
         loop {
             // If we have a stashed line, process it before doing anything else.
-            if let Some((line, src)) = this.pinned.stashed.take() {
+            if let Some((line, src)) = this.stashed.take() {
                 // Handle the stashed line. If the handler gave us something -
                 // return it, otherwise restart the loop iteration to start
                 // anew. Handler could've stashed another value, continuing to
                 // the new loop iteration handles that.
-                if let Some(val) = this.pinned.handle_line_and_stashing(line, src) {
+                if let Some(val) = Self::handle_line_and_stashing(&mut this, line, src) {
                     return Poll::Ready(Some(val));
                 }
                 continue;
             }
 
             // If we're in draining mode, short circut here.
-            if let Some(to_drain) = &mut this.pinned.draining {
+            if let Some(to_drain) = &mut this.draining {
                 if let Some(val) = to_drain.pop() {
                     return Poll::Ready(Some(val));
                 } else {
@@ -158,8 +164,8 @@ where
             }
 
             // Check for keys that have hit their timeout.
-            while let Poll::Ready(Some(Ok(expired_key))) = this.pinned.timeouts.poll_expired(cx) {
-                this.pinned.expired.push_back(expired_key.into_inner());
+            while let Poll::Ready(Some(Ok(expired_key))) = this.logic.timeouts.poll_expired(cx) {
+                this.expired.push_back(expired_key.into_inner());
             }
 
             match this.inner.poll_next_unpin(cx) {
@@ -167,15 +173,15 @@ where
                     // Handle the incoming line we got from `inner`. If the
                     // handler gave us something - return it, otherwise continue
                     // with the flow.
-                    if let Some(val) = this.pinned.handle_line_and_stashing(line, src) {
+                    if let Some(val) = Self::handle_line_and_stashing(&mut this, line, src) {
                         return Poll::Ready(Some(val));
                     }
                 }
                 Poll::Ready(None) => {
                     // We got `None`, this means the `inner` stream has ended.
                     // Start flushing all existing data, stop polling `inner`.
-                    this.pinned.draining = Some(
-                        this.pinned
+                    *this.draining = Some(
+                        this.logic
                             .buffers
                             .drain()
                             .map(|(k, v)| (v.into(), k))
@@ -185,8 +191,8 @@ where
                 Poll::Pending => {
                     // We didn't get any lines from `inner`, so we just give
                     // a line from the expired lines queue.
-                    if let Some(key) = this.pinned.expired.pop_front() {
-                        if let Some(buffered) = this.pinned.buffers.remove(&key) {
+                    if let Some(key) = this.expired.pop_front() {
+                        if let Some(buffered) = this.logic.buffers.remove(&key) {
                             return Poll::Ready(Some((buffered.freeze(), key)));
                         }
                     }
@@ -198,21 +204,56 @@ where
     }
 }
 
+impl<T, K> LineAgg<T, K>
+where
+    T: Stream<Item = (Bytes, K)> + Unpin,
+    K: Hash + Eq + Clone,
+{
+    /// Handle line and do stashing of extra emitted lines.
+    /// Requires that the `stashed` item is empty (i.e. entry is vacant). This
+    /// invariant has to be taken care of by the caller.
+    fn handle_line_and_stashing(
+        this: &mut LineAggProj<'_, T, K>,
+        line: Bytes,
+        src: K,
+    ) -> Option<(Bytes, K)> {
+        // Stashed line is always consumed at the start of the `poll`
+        // loop before entering this line processing logic. If it's
+        // non-empty here - it's a bug.
+        debug_assert!(this.stashed.is_none());
+        let val = this.logic.handle_line(line, src)?;
+        let val = match val {
+            // If we have to emit just one line - that's easy,
+            // we just return it.
+            (Emit::One(line), src) => (line, src),
+            // If we have to emit two lines - take the second
+            // one and stash it, then return the first one.
+            // This way, the stashed line will be returned
+            // on the next stream poll.
+            (Emit::Two(line, to_stash), src) => {
+                *this.stashed = Some((to_stash, src.clone()));
+                (line, src)
+            }
+        };
+        Some(val)
+    }
+}
+
 /// Specifies the amount of lines to emit in response to a single input line.
 /// We have to emit either one or two lines.
-enum Emit {
+pub enum Emit {
     /// Emit one line.
     One(Bytes),
     /// Emit two lines, in the order they're specified.
     Two(Bytes, Bytes),
 }
 
-impl<K> Pinned<K>
+impl<K> Logic<K>
 where
     K: Hash + Eq + Clone,
 {
     /// Handle line, if we have something to output - return it.
-    fn handle_line(&mut self, line: Bytes, src: K) -> Option<(Emit, K)> {
+    pub fn handle_line(&mut self, line: Bytes, src: K) -> Option<(Emit, K)> {
         // Check if we already have the buffered data for the source.
         match self.buffers.entry(src) {
             Entry::Occupied(mut entry) => {
@@ -286,31 +327,6 @@ where
             }
         }
     }
-
-    /// Handle line and do stashing of extra emitted lines.
-    /// Requires that the `stashed` item is empty (i.e. entry is vacant). This
-    /// invariant has to be taken care of by the caller.
-    fn handle_line_and_stashing(&mut self, line: Bytes, src: K) -> Option<(Bytes, K)> {
-        // Stashed line is always consumed at the start of the `poll`
-        // loop before entering this line processing logic. If it's
-        // non-empty here - it's a bug.
-        debug_assert!(self.stashed.is_none());
-        let val = self.handle_line(line, src)?;
-        let val = match val {
-            // If we have to emit just one line - that's easy,
-            // we just return it.
-            (Emit::One(line), src) => (line, src),
-            // If we have to emit two lines - take the second
-            // one and stash it, then return the first one.
-            // This way, the stashed line will be returned
-            // on the next stream poll.
-            (Emit::Two(line, to_stash), src) => {
-                self.stashed = Some((to_stash, src.clone()));
-                (line, src)
-            }
-        };
-        Some(val)
-    }
 }
 
 fn add_next_line(buffered: &mut BytesMut, line: Bytes) {
@@ -321,7 +337,6 @@ fn add_next_line(buffered: &mut BytesMut, line: Bytes) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::StreamExt;
     use pretty_assertions::assert_eq;
 
     #[tokio::test]

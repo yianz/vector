@@ -273,26 +273,24 @@ pub fn file_source(
         // sizing here is just a guess
         let (tx, rx) = futures01::sync::mpsc::channel(100);
 
+        let wrap_with_line_agg = |rx, config| {
+            let rx = StreamExt::map(Compat01As03::new(rx), |val| val.unwrap()); // TODO: fix, ok() instead of unwrap()
+            Box::new(Compat::new(LineAgg::new(rx, config).map(Ok)))
+        };
         let messages: Box<dyn Stream<Item = (Bytes, String), Error = ()> + Send> =
             if let Some(ref multiline_config) = multiline_config {
-                Box::new(Compat::new(
-                    LineAgg::new(
-                        Compat01As03::new(rx).map(|val| val.unwrap()),
-                        multiline_config.try_into().unwrap(), // validated in build
-                    )
-                    .map(Ok),
-                ))
+                wrap_with_line_agg(
+                    rx,
+                    multiline_config.try_into().unwrap(), // validated in build
+                )
             } else if let Some(msi) = message_start_indicator {
-                Box::new(Compat::new(
-                    LineAgg::new(
-                        Compat01As03::new(rx).map(|val| val.unwrap()),
-                        line_agg::Config::for_legacy(
-                            Regex::new(&msi).unwrap(), // validated in build
-                            multi_line_timeout,
-                        ),
-                    )
-                    .map(Ok),
-                ))
+                wrap_with_line_agg(
+                    rx,
+                    line_agg::Config::for_legacy(
+                        Regex::new(&msi).unwrap(), // validated in build
+                        multi_line_timeout,
+                    ),
+                )
             } else {
                 Box::new(rx)
             };
