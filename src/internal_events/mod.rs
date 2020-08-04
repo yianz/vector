@@ -15,6 +15,7 @@ mod lua;
 #[cfg(feature = "sources-prometheus")]
 mod prometheus;
 mod regex;
+mod remap;
 mod splunk_hec;
 mod stdin;
 mod syslog;
@@ -44,6 +45,7 @@ pub use self::lua::*;
 #[cfg(feature = "sources-prometheus")]
 pub use self::prometheus::*;
 pub use self::regex::*;
+pub use self::remap::*;
 pub use self::splunk_hec::*;
 pub use self::stdin::*;
 pub use self::syslog::*;
