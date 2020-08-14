@@ -107,7 +107,7 @@ impl StatsdSvc {
             acker,
         )
         .sink_map_err(|e| error!("Fatal statsd sink error: {}", e))
-        .with_flat_map(move |event| stream::iter_ok(encode_event(event, &namespace)));
+        .with_flat_map(move |event| stream::once(Ok(encode_event(event, &namespace))));
 
         Ok(Box::new(sink))
     }
@@ -132,7 +132,7 @@ fn encode_tags(tags: &BTreeMap<String, String>) -> String {
     parts.join(",")
 }
 
-fn encode_event(event: Event, namespace: &str) -> Option<Vec<u8>> {
+fn encode_event(event: Event, namespace: &str) -> Vec<u8> {
     let mut buf = Vec::new();
 
     let metric = event.as_metric();
@@ -202,7 +202,7 @@ fn encode_event(event: Event, namespace: &str) -> Option<Vec<u8>> {
     let mut body: Vec<u8> = message.into_bytes();
     body.push(b'\n');
 
-    Some(body)
+    body
 }
 
 impl Service<Vec<u8>> for StatsdSvc {
@@ -271,7 +271,7 @@ mod test {
             value: MetricValue::Counter { value: 1.5 },
         };
         let event = Event::Metric(metric1.clone());
-        let frame = &encode_event(event, "").unwrap();
+        let frame = &encode_event(event, "");
         let metric2 = parse(from_utf8(&frame).unwrap().trim()).unwrap();
         assert_eq!(metric1, metric2);
     }
@@ -287,7 +287,7 @@ mod test {
             value: MetricValue::Gauge { value: -1.5 },
         };
         let event = Event::Metric(metric1.clone());
-        let frame = &encode_event(event, "").unwrap();
+        let frame = &encode_event(event, "");
         let metric2 = parse(from_utf8(&frame).unwrap().trim()).unwrap();
         assert_eq!(metric1, metric2);
     }
@@ -307,7 +307,7 @@ mod test {
             },
         };
         let event = Event::Metric(metric1.clone());
-        let frame = &encode_event(event, "").unwrap();
+        let frame = &encode_event(event, "");
         let metric2 = parse(from_utf8(&frame).unwrap().trim()).unwrap();
         assert_eq!(metric1, metric2);
     }
@@ -325,7 +325,7 @@ mod test {
             },
         };
         let event = Event::Metric(metric1.clone());
-        let frame = &encode_event(event, "").unwrap();
+        let frame = &encode_event(event, "");
         let metric2 = parse(from_utf8(&frame).unwrap().trim()).unwrap();
         assert_eq!(metric1, metric2);
     }
