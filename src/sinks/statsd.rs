@@ -117,19 +117,26 @@ impl StatsdSvc {
     }
 }
 
+fn push_tag(result: &mut String, name: &str, value: &str) {
+    result.push_str(name);
+    if value != "true" {
+        result.push(':');
+        result.push_str(value);
+    }
+}
+
 fn encode_tags(tags: &BTreeMap<String, String>) -> String {
-    let mut parts: Vec<_> = tags
-        .iter()
-        .map(|(name, value)| {
-            if value == "true" {
-                name.to_string()
-            } else {
-                format!("{}:{}", name, value)
-            }
-        })
-        .collect();
-    parts.sort();
-    parts.join(",")
+    let size = tags.iter().map(|(k, v)| k.len() + v.len() + 2).sum();
+    let mut result = String::with_capacity(size);
+    let mut iter = tags.iter();
+    if let Some((name, value)) = iter.next() {
+        push_tag(&mut result, name, value);
+    }
+    for (name, value) in iter {
+        result.push(',');
+        push_tag(&mut result, name, value);
+    }
+    result
 }
 
 fn encode_event(event: Event, namespace: &str) -> Vec<u8> {
