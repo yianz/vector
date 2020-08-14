@@ -93,7 +93,7 @@ impl StatsdSvc {
             .events(1000)
             .timeout(1)
             .parse_config(config.batch)?;
-        let namespace = config.namespace.clone();
+        let namespace = config.namespace;
 
         let client = Client::new(config.address)?;
         let service = StatsdSvc { client };
