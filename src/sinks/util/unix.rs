@@ -1,15 +1,15 @@
+use super::ByteSink;
 use crate::{
     config::SinkContext,
     internal_events::{
         UnixSocketConnectionEstablished, UnixSocketConnectionFailure, UnixSocketError,
         UnixSocketEventSent,
     },
-    sinks::util::{encode_event, encoding::EncodingConfig, Encoding, StreamSink},
-    sinks::{Healthcheck, RouterSink},
+    sinks::Healthcheck,
 };
 use bytes::Bytes;
 use futures::{compat::CompatSink, FutureExt, TryFutureExt};
-use futures01::{stream::iter_ok, try_ready, Async, AsyncSink, Future, Poll, Sink, StartSend};
+use futures01::{try_ready, Async, AsyncSink, Future, Poll, Sink, StartSend};
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::{path::PathBuf, time::Duration};
@@ -25,24 +25,18 @@ use tracing::field;
 #[serde(deny_unknown_fields)]
 pub struct UnixSinkConfig {
     pub path: PathBuf,
-    pub encoding: EncodingConfig<Encoding>,
 }
 
 impl UnixSinkConfig {
-    pub fn new(path: PathBuf, encoding: EncodingConfig<Encoding>) -> Self {
-        Self { path, encoding }
+    pub fn new(path: PathBuf) -> Self {
+        Self { path }
     }
 
-    pub fn build(&self, cx: SinkContext) -> crate::Result<(RouterSink, Healthcheck)> {
-        let encoding = self.encoding.clone();
+    pub fn build(&self, _cx: SinkContext) -> crate::Result<(ByteSink, Healthcheck)> {
         let unix = UnixSink::new(self.path.clone());
-        let sink = StreamSink::new(unix, cx.acker());
-
-        let sink =
-            Box::new(sink.with_flat_map(move |event| iter_ok(encode_event(event, &encoding))));
         let healthcheck = healthcheck(self.path.clone()).boxed().compat();
 
-        Ok((sink, Box::new(healthcheck)))
+        Ok((Box::new(unix), Box::new(healthcheck)))
     }
 }
 
@@ -150,7 +144,7 @@ impl Sink for UnixSink {
         match self.poll_connection() {
             Ok(Async::NotReady) => Ok(AsyncSink::NotReady(line)),
             Err(_) => {
-                unreachable!(); // poll_ready() should never return an error
+                unreachable!(); // poll_connection() should never return an error
             }
             Ok(Async::Ready(connection)) => match connection.start_send(line) {
                 Err(error) => {

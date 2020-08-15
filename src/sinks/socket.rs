@@ -2,17 +2,22 @@
 use crate::sinks::util::unix::UnixSinkConfig;
 use crate::{
     config::{DataType, SinkConfig, SinkContext, SinkDescription},
-    sinks::util::{encoding::EncodingConfig, tcp::TcpSinkConfig, udp::UdpSinkConfig, Encoding},
+    sinks::util::{
+        encode_event, encoding::EncodingConfig, tcp::TcpSinkConfig, udp::UdpSinkConfig, Encoding,
+        StreamSink,
+    },
     tls::TlsConfig,
 };
+use futures01::{stream, Sink};
 use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 // TODO: add back when serde-rs/serde#1358 is addressed
 // #[serde(deny_unknown_fields)]
 pub struct SocketSinkConfig {
     #[serde(flatten)]
     pub mode: Mode,
+    pub encoding: EncodingConfig<Encoding>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -31,19 +36,14 @@ inventory::submit! {
 impl SocketSinkConfig {
     pub fn make_tcp_config(
         address: String,
-        encoding: EncodingConfig<Encoding>,
+        _encoding: EncodingConfig<Encoding>,
         tls: Option<TlsConfig>,
     ) -> Self {
-        TcpSinkConfig {
-            address,
-            encoding,
-            tls,
-        }
-        .into()
+        TcpSinkConfig { address, tls }.into()
     }
 
     pub fn make_basic_tcp_config(address: String) -> Self {
-        TcpSinkConfig::new(address, EncodingConfig::from(Encoding::Text)).into()
+        TcpSinkConfig::new(address).into()
     }
 }
 
@@ -51,6 +51,7 @@ impl From<TcpSinkConfig> for SocketSinkConfig {
     fn from(config: TcpSinkConfig) -> Self {
         Self {
             mode: Mode::Tcp(config),
+            encoding: EncodingConfig::from(Encoding::Text),
         }
     }
 }
@@ -59,6 +60,7 @@ impl From<UdpSinkConfig> for SocketSinkConfig {
     fn from(config: UdpSinkConfig) -> Self {
         Self {
             mode: Mode::Udp(config),
+            encoding: EncodingConfig::from(Encoding::Text),
         }
     }
 }
@@ -66,12 +68,18 @@ impl From<UdpSinkConfig> for SocketSinkConfig {
 #[typetag::serde(name = "socket")]
 impl SinkConfig for SocketSinkConfig {
     fn build(&self, cx: SinkContext) -> crate::Result<(super::RouterSink, super::Healthcheck)> {
-        match &self.mode {
-            Mode::Tcp(config) => config.build(cx),
-            Mode::Udp(config) => config.build(cx),
+        let acker = cx.acker();
+        let (inner_sink, healthcheck) = match &self.mode {
+            Mode::Tcp(config) => config.build(cx)?,
+            Mode::Udp(config) => config.build(cx)?,
             #[cfg(unix)]
-            Mode::Unix(config) => config.build(cx),
-        }
+            Mode::Unix(config) => config.build(cx)?,
+        };
+
+        let encoding = self.encoding.clone();
+        let sink = StreamSink::new(inner_sink, acker)
+            .with_flat_map(move |event| stream::iter_ok(encode_event(event, &encoding)));
+        Ok((Box::new(sink), healthcheck))
     }
 
     fn input_type(&self) -> DataType {

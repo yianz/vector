@@ -1,3 +1,4 @@
+use super::ByteSink;
 use crate::{
     config::SinkContext,
     dns::Resolver,
@@ -6,8 +7,8 @@ use crate::{
         TcpConnectionDisconnected, TcpConnectionEstablished, TcpConnectionFailed,
         TcpConnectionShutdown, TcpEventSent, TcpFlushError,
     },
-    sinks::util::{encode_event, encoding::EncodingConfig, Encoding, SinkBuildError, StreamSink},
-    sinks::{Healthcheck, RouterSink},
+    sinks::util::SinkBuildError,
+    sinks::Healthcheck,
     tls::{MaybeTlsConnector, MaybeTlsSettings, MaybeTlsStream, TlsConfig},
 };
 use bytes::Bytes;
@@ -15,9 +16,7 @@ use futures::{
     compat::{Compat01As03, CompatSink},
     FutureExt, TryFutureExt,
 };
-use futures01::{
-    future, stream::iter_ok, try_ready, Async, AsyncSink, Future, Poll, Sink, StartSend,
-};
+use futures01::{future, try_ready, Async, AsyncSink, Future, Poll, Sink, StartSend};
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::{
@@ -37,20 +36,15 @@ use tokio_util::{
 #[serde(deny_unknown_fields)]
 pub struct TcpSinkConfig {
     pub address: String,
-    pub encoding: EncodingConfig<Encoding>,
     pub tls: Option<TlsConfig>,
 }
 
 impl TcpSinkConfig {
-    pub fn new(address: String, encoding: EncodingConfig<Encoding>) -> Self {
-        Self {
-            address,
-            encoding,
-            tls: None,
-        }
+    pub fn new(address: String) -> Self {
+        Self { address, tls: None }
     }
 
-    pub fn build(&self, cx: SinkContext) -> crate::Result<(RouterSink, Healthcheck)> {
+    pub fn build(&self, cx: SinkContext) -> crate::Result<(ByteSink, Healthcheck)> {
         let uri = self.address.parse::<http::Uri>()?;
 
         let host = uri.host().ok_or(SinkBuildError::MissingHost)?.to_string();
@@ -61,13 +55,7 @@ impl TcpSinkConfig {
         let tcp = TcpSink::new(host, port, cx.resolver(), tls);
         let healthcheck = tcp.healthcheck();
 
-        let encoding = self.encoding.clone();
-        let sink = Box::new(
-            StreamSink::new(tcp, cx.acker())
-                .with_flat_map(move |event| iter_ok(encode_event(event, &encoding))),
-        );
-
-        Ok((sink, healthcheck))
+        Ok((Box::new(tcp), healthcheck))
     }
 }
 
@@ -167,7 +155,7 @@ impl TcpSink {
                 TcpSinkState::Backoff(ref mut delay) => match delay.poll() {
                     Ok(Async::NotReady) => return Ok(Async::NotReady),
                     // Err can only occur if the tokio runtime has been shutdown or if more than 2^63 timers have been created
-                    Err(()) => unreachable!(),
+                    Err(_) => unreachable!(),
                     Ok(Async::Ready(())) => {
                         debug!(message = "disconnected.");
                         TcpSinkState::Disconnected

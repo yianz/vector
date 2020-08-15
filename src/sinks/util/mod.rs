@@ -14,7 +14,7 @@ pub mod tcp;
 #[cfg(test)]
 pub mod test;
 pub mod udp;
-#[cfg(all(feature = "sinks-socket", unix))]
+#[cfg(all(unix))]
 pub mod unix;
 pub mod uri;
 
@@ -41,6 +41,9 @@ enum SinkBuildError {
     #[snafu(display("Missing port in address field"))]
     MissingPort,
 }
+
+pub type ByteSink =
+    Box<dyn futures01::Sink<SinkItem = Bytes, SinkError = ()> + 'static + Send>;
 
 /**
  * Enum representing different ways to encode events as they are sent into a Sink.

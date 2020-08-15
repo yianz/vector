@@ -26,17 +26,36 @@ impl InternalEvent for UdpEventReceived {
 }
 
 #[derive(Debug)]
-pub struct UdpSocketError {
+pub struct UdpSendFailed {
     pub error: std::io::Error,
 }
 
-impl InternalEvent for UdpSocketError {
+impl InternalEvent for UdpSendFailed {
+    fn emit_logs(&self) {
+        error!(message = "error sending datagram.", error = %self.error);
+    }
+
+    fn emit_metrics(&self) {
+        counter!("send_errors", 1,
+            "component_kind" => "source",
+            "component_type" => "socket",
+            "mode" => "udp",
+        );
+    }
+}
+
+#[derive(Debug)]
+pub struct UdpReadFailed {
+    pub error: std::io::Error,
+}
+
+impl InternalEvent for UdpReadFailed {
     fn emit_logs(&self) {
         error!(message = "error reading datagram.", error = %self.error);
     }
 
     fn emit_metrics(&self) {
-        counter!("socket_errors", 1,
+        counter!("read_errors", 1,
             "component_kind" => "source",
             "component_type" => "socket",
             "mode" => "udp",

@@ -1,6 +1,6 @@
 use crate::{
     event::{self, Event},
-    internal_events::{UdpEventReceived, UdpSocketError},
+    internal_events::{UdpEventReceived, UdpReadFailed},
     shutdown::ShutdownSignal,
     sources::Source,
     Pipeline,
@@ -62,7 +62,7 @@ pub fn udp(
                 tokio::select! {
                     recv = socket.recv_from(&mut buf) => {
                         let (byte_size, address) = recv.map_err(|error| {
-                            emit!(UdpSocketError { error });
+                            emit!(UdpReadFailed { error });
                         })?;
 
                         let mut payload = buf.split_to(byte_size);

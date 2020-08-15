@@ -1,12 +1,13 @@
-use super::{encode_event, encoding::EncodingConfig, Encoding, SinkBuildError, StreamSink};
+use super::{ByteSink, SinkBuildError};
 use crate::{
     config::SinkContext,
     dns::{Resolver, ResolverFuture},
-    sinks::{Healthcheck, RouterSink},
+    internal_events::UdpSendFailed,
+    sinks::Healthcheck,
 };
 use bytes::Bytes;
 use futures::{FutureExt, TryFutureExt};
-use futures01::{future, stream::iter_ok, Async, AsyncSink, Future, Poll, Sink, StartSend};
+use futures01::{future, Async, AsyncSink, Future, Poll, Sink, StartSend};
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
 use std::io;
@@ -26,41 +27,27 @@ pub enum UdpBuildError {
 #[serde(deny_unknown_fields)]
 pub struct UdpSinkConfig {
     pub address: String,
-    pub encoding: EncodingConfig<Encoding>,
 }
 
 impl UdpSinkConfig {
-    pub fn new(address: String, encoding: EncodingConfig<Encoding>) -> Self {
-        Self { address, encoding }
+    pub fn new(address: String) -> Self {
+        Self { address }
     }
 
-    pub fn build(&self, cx: SinkContext) -> crate::Result<(RouterSink, Healthcheck)> {
+    pub fn build(&self, cx: SinkContext) -> crate::Result<(ByteSink, Healthcheck)> {
         let uri = self.address.parse::<http::Uri>()?;
 
         let host = uri.host().ok_or(SinkBuildError::MissingHost)?.to_string();
         let port = uri.port_u16().ok_or(SinkBuildError::MissingPort)?;
 
-        let sink = raw_udp(host, port, self.encoding.clone(), cx)?;
+        let udp = UdpSink::new(host, port, cx.resolver())?;
         let healthcheck = udp_healthcheck();
 
-        Ok((sink, healthcheck))
+        Ok((Box::new(udp), healthcheck))
     }
 }
 
-pub fn raw_udp(
-    host: String,
-    port: u16,
-    encoding: EncodingConfig<Encoding>,
-    cx: SinkContext,
-) -> Result<RouterSink, UdpBuildError> {
-    let sink = UdpSink::new(host, port, cx.resolver())?;
-    let sink = StreamSink::new(sink, cx.acker());
-    Ok(Box::new(sink.with_flat_map(move |event| {
-        iter_ok(encode_event(event, &encoding))
-    })))
-}
-
-fn udp_healthcheck() -> Healthcheck {
+pub fn udp_healthcheck() -> Healthcheck {
     Box::new(future::ok(()))
 }
 
@@ -162,13 +149,10 @@ impl Sink for UdpSink {
                     message = "sending event.",
                     bytes = &field::display(line.len())
                 );
-                match self.socket.send_to(&line, address) {
-                    Err(error) => {
-                        error!(message = "send failed", %error);
-                        Err(())
-                    }
-                    Ok(_) => Ok(AsyncSink::Ready),
+                if let Err(error) = self.socket.send_to(&line, address) {
+                    emit!(UdpSendFailed { error });
                 }
+                Ok(AsyncSink::Ready)
             }
             Ok(Async::NotReady) => Ok(AsyncSink::NotReady(line)),
             Err(_) => unreachable!(),
