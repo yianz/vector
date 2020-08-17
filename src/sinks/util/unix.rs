@@ -189,9 +189,6 @@ impl Sink for UnixSink {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_util::{random_lines_with_stream, CountReceiver};
-    use futures::compat::Future01CompatExt;
-    use futures01::Sink;
     use tokio::net::UnixListener;
 
     fn temp_uds_path(name: &str) -> PathBuf {
@@ -206,29 +203,5 @@ mod tests {
 
         let bad_path = temp_uds_path("no_one_listening");
         assert!(healthcheck(bad_path).await.is_err());
-    }
-
-    #[tokio::test]
-    async fn basic_unix_sink() {
-        let num_lines = 1000;
-        let out_path = temp_uds_path("unix_test");
-
-        // Set up server to receive events from the Sink.
-        let mut receiver = CountReceiver::receive_lines_unix(out_path.clone());
-
-        // Set up Sink
-        let config = UnixSinkConfig::new(out_path, Encoding::Text.into());
-        let cx = SinkContext::new_test();
-        let (sink, _healthcheck) = config.build(cx).unwrap();
-
-        // Send the test data
-        let (input_lines, events) = random_lines_with_stream(100, num_lines);
-        let _ = sink.send_all(events).compat().await.unwrap();
-
-        // Wait for output to connect
-        receiver.connected().await;
-
-        // Receive the data sent by the Sink to the receiver
-        assert_eq!(input_lines, receiver.wait().await);
     }
 }

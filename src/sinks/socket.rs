@@ -103,6 +103,7 @@ mod test {
     use futures01::Sink;
     use serde_json::Value;
     use std::net::UdpSocket;
+    use std::path::PathBuf;
 
     #[test]
     fn udp_message() {
@@ -113,8 +114,8 @@ mod test {
         let config = SocketSinkConfig {
             mode: Mode::Udp(UdpSinkConfig {
                 address: addr.to_string(),
-                encoding: Encoding::Json.into(),
             }),
+            encoding: Encoding::Json.into(),
         };
         let mut rt = runtime();
         let context = SinkContext::new_test();
@@ -144,9 +145,9 @@ mod test {
         let config = SocketSinkConfig {
             mode: Mode::Tcp(TcpSinkConfig {
                 address: addr.to_string(),
-                encoding: Encoding::Json.into(),
                 tls: None,
             }),
+            encoding: Encoding::Json.into(),
         };
         let mut rt = runtime();
         rt.block_on_std(async move {
@@ -154,6 +155,45 @@ mod test {
             let (sink, _healthcheck) = config.build(context).unwrap();
 
             let mut receiver = CountReceiver::receive_lines(addr);
+
+            let (lines, events) = random_lines_with_stream(10, 100);
+            let _ = sink.send_all(events).compat().await.unwrap();
+
+            // Wait for output to connect
+            receiver.connected().await;
+
+            let output = receiver.wait().await;
+            assert_eq!(lines.len(), output.len());
+            for (source, received) in lines.iter().zip(output) {
+                let json = serde_json::from_str::<Value>(&received).expect("Invalid JSON");
+                let received = json.get("message").unwrap().as_str().unwrap();
+                assert_eq!(source, received);
+            }
+        });
+    }
+
+    #[cfg(unix)]
+    fn temp_uds_path(name: &str) -> PathBuf {
+        tempfile::tempdir().unwrap().into_path().join(name)
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_sink() {
+        crate::test_util::trace_init();
+        let out_path = temp_uds_path("unix_test");
+        let config = SocketSinkConfig {
+            mode: Mode::Unix(UnixSinkConfig {
+                path: out_path.clone(),
+            }),
+            encoding: Encoding::Json.into(),
+        };
+        let mut rt = runtime();
+        rt.block_on_std(async move {
+            let context = SinkContext::new_test();
+            let (sink, _healthcheck) = config.build(context).unwrap();
+
+            let mut receiver = CountReceiver::receive_lines_unix(out_path.clone());
 
             let (lines, events) = random_lines_with_stream(10, 100);
             let _ = sink.send_all(events).compat().await.unwrap();
@@ -198,7 +238,6 @@ mod test {
         let config = SocketSinkConfig {
             mode: Mode::Tcp(TcpSinkConfig {
                 address: addr.to_string(),
-                encoding: Encoding::Text.into(),
                 tls: Some(TlsConfig {
                     enabled: Some(true),
                     options: TlsOptions {
@@ -209,6 +248,7 @@ mod test {
                     },
                 }),
             }),
+            encoding: Encoding::Text.into(),
         };
         let mut rt = runtime();
         let context = SinkContext::new_test();
