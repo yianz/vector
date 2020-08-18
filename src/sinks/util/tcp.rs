@@ -59,7 +59,39 @@ impl TcpSinkConfig {
     }
 }
 
-pub struct TcpSink {
+#[derive(Clone)]
+pub struct IntoTcpSink {
+    host: String,
+    port: u16,
+    resolver: Resolver,
+    tls: MaybeTlsSettings,
+}
+
+impl IntoTcpSink {
+    fn into_sink(self) -> ByteSink {
+        let span = info_span!("connection", %host, %port);
+        Box::new(TcpSink {
+            host: self.host,
+            port: self.port,
+            resolver: self.resolver,
+            tls: self.tls,
+            state: TcpSinkState::Disconnected,
+            backoff: Self::fresh_backoff(),
+            span,
+        })
+    }
+
+    fn healthcheck(&self) -> Healthcheck {
+        tcp_healthcheck(
+            self.host.clone(),
+            self.port,
+            self.resolver,
+            self.tls.clone(),
+        )
+    }
+}
+
+struct TcpSink {
     host: String,
     port: u16,
     resolver: Resolver,
@@ -285,6 +317,8 @@ pub fn tcp_healthcheck(
     resolver: Resolver,
     tls: MaybeTlsSettings,
 ) -> Healthcheck {
+    let host = self.host.clone();
+    let port = self.port;
     // Lazy to avoid immediately connecting
     let check = future::lazy(move || {
         resolver
