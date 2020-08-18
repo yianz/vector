@@ -19,6 +19,7 @@ use tower03::{Service, ServiceBuilder};
 #[derive(Debug, Snafu)]
 pub enum StatsdError {
     SendError,
+    BuildError,
 }
 
 pub struct StatsdSvc {
@@ -212,13 +213,10 @@ impl Service<Vec<u8>> for StatsdSvc {
         };
         let sink = match build_result {
             Ok((sink, _)) => sink,
-            Err(_e) => return futures::future::err(StatsdError::SendError).boxed(),
+            Err(_e) => return futures::future::err(StatsdError::BuildError).boxed(),
         };
         sink.send(frame.into())
-            .then(|result| match result {
-                Ok(_) => Ok(()), // drop the sink and close the connection
-                Err(_e) => Err(StatsdError::SendError),
-            })
+            .then(|result| result.map(|_sink| ()).map_err(|_| StatsdError::SendError))
             .compat()
             .boxed()
     }
