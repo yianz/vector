@@ -383,7 +383,7 @@ sinks-sematext_logs = ["sinks-elasticsearch"]
 sinks-socket = []
 sinks-papertrail = []
 sinks-splunk_hec = ["bytesize"]
-sinks-statsd = []
+sinks-statsd = ["tokio-util/udp"]
 sinks-vector = []
 sinks-pulsar = ["pulsar"]
 

@@ -329,7 +329,6 @@ mod test {
         assert_eq!(metric1, metric2);
     }
 
-    /*
     #[test]
     fn test_send_to_statsd() {
         crate::test_util::trace_init();
@@ -392,5 +391,4 @@ mod test {
             );
         });
     }
-    */
 }

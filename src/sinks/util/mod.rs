@@ -42,8 +42,7 @@ enum SinkBuildError {
     MissingPort,
 }
 
-pub type ByteSink =
-    Box<dyn futures01::Sink<SinkItem = Bytes, SinkError = ()> + 'static + Send>;
+pub type ByteSink = Box<dyn futures01::Sink<SinkItem = Bytes, SinkError = ()> + 'static + Send>;
 
 /**
  * Enum representing different ways to encode events as they are sent into a Sink.
