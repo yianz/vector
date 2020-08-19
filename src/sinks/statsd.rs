@@ -3,8 +3,8 @@ use crate::{
     event::metric::{MetricKind, MetricValue, StatisticKind},
     event::Event,
     sinks::util::{
-        service2::TowerCompat, tcp::TcpSinkConfig, udp::UdpSinkConfig, unix::UnixSinkConfig,
-        BatchConfig, BatchSettings, BatchSink, Buffer, Compression,
+        tcp::TcpSinkConfig, udp::UdpSinkConfig, unix::UnixSinkConfig, BatchConfig, BatchSettings,
+        BatchSink, Buffer, Compression, TowerCompat,
     },
 };
 use futures::{compat::Future01CompatExt, future::BoxFuture, FutureExt};

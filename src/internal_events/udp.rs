@@ -8,7 +8,7 @@ pub struct UdpEventReceived {
 
 impl InternalEvent for UdpEventReceived {
     fn emit_logs(&self) {
-        trace!(message = "received one event.");
+        trace!(message = "Received one event.");
     }
 
     fn emit_metrics(&self) {
@@ -51,7 +51,7 @@ pub struct UdpReadFailed {
 
 impl InternalEvent for UdpReadFailed {
     fn emit_logs(&self) {
-        error!(message = "error reading datagram.", error = %self.error);
+        error!(message = "Error reading datagram.", error = %self.error);
     }
 
     fn emit_metrics(&self) {

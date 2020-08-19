@@ -69,14 +69,14 @@ pub struct IntoTcpSink {
 
 impl IntoTcpSink {
     fn into_sink(self) -> ByteSink {
-        let span = info_span!("connection", %host, %port);
+        let span = info_span!("connection", %self.host, %self.port);
         Box::new(TcpSink {
             host: self.host,
             port: self.port,
             resolver: self.resolver,
             tls: self.tls,
             state: TcpSinkState::Disconnected,
-            backoff: Self::fresh_backoff(),
+            backoff: TcpSink::fresh_backoff(),
             span,
         })
     }
@@ -91,7 +91,7 @@ impl IntoTcpSink {
     }
 }
 
-struct TcpSink {
+pub struct TcpSink {
     host: String,
     port: u16,
     resolver: Resolver,
@@ -155,7 +155,7 @@ impl TcpSink {
         loop {
             self.state = match self.state {
                 TcpSinkState::Disconnected => {
-                    debug!(message = "resolving dns.", host = %self.host);
+                    debug!(message = "resolving DNS.", host = %self.host);
                     let fut = self.resolver.lookup_ip_01(self.host.clone());
 
                     TcpSinkState::ResolvingDns(fut)
@@ -180,7 +180,7 @@ impl TcpSink {
                     }
                     Ok(Async::NotReady) => return Ok(Async::NotReady),
                     Err(error) => {
-                        error!(message = "unable to resolve dns.", %error);
+                        error!(message = "unable to resolve DNS.", %error);
                         TcpSinkState::Backoff(self.next_delay01())
                     }
                 },
@@ -317,8 +317,6 @@ pub fn tcp_healthcheck(
     resolver: Resolver,
     tls: MaybeTlsSettings,
 ) -> Healthcheck {
-    let host = self.host.clone();
-    let port = self.port;
     // Lazy to avoid immediately connecting
     let check = future::lazy(move || {
         resolver
