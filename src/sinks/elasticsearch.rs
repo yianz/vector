@@ -1,6 +1,7 @@
 use crate::{
     config::{DataType, SinkConfig, SinkContext, SinkDescription},
     emit,
+    endpoint::Endpoint,
     event::Event,
     internal_events::{ElasticSearchEventReceived, ElasticSearchMissingKeys},
     region::{region_from_endpoint, RegionOrEndpoint},
@@ -18,7 +19,6 @@ use futures::{FutureExt, TryFutureExt};
 use futures01::Sink;
 use http::{
     header::{HeaderName, HeaderValue},
-    uri::InvalidUri,
     Request, StatusCode, Uri,
 };
 use hyper::Body;
@@ -37,7 +37,7 @@ use std::convert::TryFrom;
 pub struct ElasticSearchConfig {
     // Deprecated name
     #[serde(alias = "host")]
-    pub endpoint: String,
+    pub endpoint: Endpoint,
     pub index: Option<String>,
     pub doc_type: Option<String>,
     pub id_key: Option<String>,
@@ -139,7 +139,7 @@ impl SinkConfig for ElasticSearchConfig {
 
 #[derive(Debug)]
 pub struct ElasticSearchCommon {
-    pub base_url: String,
+    pub endpoint: Endpoint,
     bulk_uri: Uri,
     authorization: Option<String>,
     credentials: Option<rusoto::AwsCredentialsProvider>,
@@ -154,10 +154,6 @@ pub struct ElasticSearchCommon {
 
 #[derive(Debug, Snafu)]
 enum ParseError {
-    #[snafu(display("Invalid host {:?}: {:?}", host, source))]
-    InvalidHost { host: String, source: InvalidUri },
-    #[snafu(display("Host {:?} must include hostname", host))]
-    HostMustIncludeHostname { host: String },
     #[snafu(display("Could not generate AWS credentials: {:?}", source))]
     AWSCredentialsGenerateFailed { source: CredentialsError },
     #[snafu(display("Compression can not be used with AWS hosted Elasticsearch"))]
@@ -360,23 +356,11 @@ impl ElasticSearchCommon {
             _ => None,
         };
 
-        let base_url = config.endpoint.clone();
+        let endpoint = config.endpoint.clone();
         let region = match &config.aws {
             Some(region) => Region::try_from(region)?,
             None => region_from_endpoint(&config.endpoint)?,
         };
-
-        // Test the configured host, but ignore the result
-        let uri = format!("{}/_test", &config.endpoint);
-        let uri = uri
-            .parse::<Uri>()
-            .with_context(|| InvalidHost { host: &base_url })?;
-        if uri.host().is_none() {
-            return Err(ParseError::HostMustIncludeHostname {
-                host: config.endpoint.clone(),
-            }
-            .into());
-        }
 
         let credentials = match &config.auth {
             Some(ElasticSearchAuth::Basic { .. }) | None => None,
@@ -409,14 +393,15 @@ impl ElasticSearchCommon {
         for (p, v) in &query_params {
             query.append_pair(&p[..], &v[..]);
         }
-        let bulk_url = format!("{}/_bulk?{}", base_url, query.finish());
-        let bulk_uri = bulk_url.parse::<Uri>().unwrap();
+        let bulk_uri = endpoint
+            .build_uri("/_bulk", &query.finish())
+            .expect("This should be a valid uri");
 
         let tls_settings = TlsSettings::from_options(&config.tls)?;
         let config = config.clone();
 
         Ok(Self {
-            base_url,
+            endpoint,
             bulk_uri,
             authorization,
             credentials,
@@ -442,7 +427,7 @@ impl ElasticSearchCommon {
 }
 
 async fn healthcheck(mut client: HttpClient, common: ElasticSearchCommon) -> crate::Result<()> {
-    let mut builder = Request::get(format!("{}/_cluster/health", common.base_url));
+    let mut builder = Request::get(common.endpoint.build_uri_static("/_cluster/health"));
 
     match &common.credentials {
         None => {

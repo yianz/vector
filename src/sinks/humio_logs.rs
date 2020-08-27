@@ -1,5 +1,6 @@
 use crate::{
     config::{DataType, SinkConfig, SinkContext, SinkDescription},
+    endpoint::Endpoint,
     sinks::splunk_hec::{self, HecSinkConfig},
     sinks::util::{
         encoding::EncodingConfigWithDefault, BatchConfig, Compression, TowerRequestConfig,
@@ -8,14 +9,16 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
-const HOST: &str = "https://cloud.humio.com";
+lazy_static::lazy_static! {
+    static ref HOST: Endpoint = Endpoint::from_static("https://cloud.humio.com");
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize, Default)]
 pub struct HumioLogsConfig {
     token: String,
     // Deprecated name
     #[serde(alias = "host")]
-    endpoint: Option<String>,
+    endpoint: Option<Endpoint>,
     source: Option<Template>,
     #[serde(
         skip_serializing_if = "crate::serde::skip_serializing_if_default",
@@ -74,7 +77,7 @@ impl SinkConfig for HumioLogsConfig {
 
 impl HumioLogsConfig {
     fn build_hec_config(&self) -> HecSinkConfig {
-        let endpoint = self.endpoint.clone().unwrap_or_else(|| HOST.to_string());
+        let endpoint = self.endpoint.clone().unwrap_or_else(|| HOST.clone()).into();
 
         HecSinkConfig {
             token: self.token.clone(),

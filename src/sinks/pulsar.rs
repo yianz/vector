@@ -1,6 +1,7 @@
 use crate::{
     buffers::Acker,
     config::{DataType, SinkConfig, SinkContext, SinkDescription},
+    endpoint::Endpoint,
     event::{self, Event},
     sinks::util::encoding::{EncodingConfig, EncodingConfigWithDefault, EncodingConfiguration},
 };
@@ -28,7 +29,7 @@ enum BuildError {
 pub struct PulsarSinkConfig {
     // Deprecated name
     #[serde(alias = "address")]
-    endpoint: String,
+    endpoint: Endpoint,
     topic: String,
     encoding: EncodingConfigWithDefault<Encoding>,
     auth: Option<AuthConfig>,
@@ -102,7 +103,7 @@ impl SinkConfig for PulsarSinkConfig {
 
 impl PulsarSinkConfig {
     async fn create_pulsar_producer(&self) -> Result<Producer<TokioExecutor>, PulsarError> {
-        let mut builder = Pulsar::builder(&self.endpoint, TokioExecutor);
+        let mut builder = Pulsar::builder(format!("{}", self.endpoint), TokioExecutor);
         if let Some(auth) = &self.auth {
             builder = builder.with_auth(Authentication {
                 name: auth.name.clone(),

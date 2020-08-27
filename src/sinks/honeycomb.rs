@@ -1,19 +1,20 @@
 use crate::{
     config::{DataType, SinkConfig, SinkContext, SinkDescription},
+    endpoint::Endpoint,
     event::{log_schema, Event, Value},
     sinks::util::{
         http::{BatchedHttpSink, HttpClient, HttpSink},
-        BatchConfig, BatchSettings, BoxedRawValue, JsonArrayBuffer, TowerRequestConfig, UriSerde,
+        BatchConfig, BatchSettings, BoxedRawValue, JsonArrayBuffer, TowerRequestConfig,
     },
 };
 use futures::TryFutureExt;
 use futures01::Sink;
-use http::{Request, StatusCode, Uri};
+use http::{Request, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 lazy_static::lazy_static! {
-    static ref HOST: UriSerde = Uri::from_static("https://api.honeycomb.io/1/batch").into();
+    static ref HOST: Endpoint = Endpoint::from_static("https://api.honeycomb.io/1/batch");
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -92,21 +93,14 @@ impl HttpSink for HoneycombConfig {
     }
 
     async fn build_request(&self, events: Self::Output) -> crate::Result<http::Request<Vec<u8>>> {
-        let uri = self.build_uri();
+        let uri = HOST
+            .build_uri(&self.dataset, "")
+            .expect("This should be a valid uri");
         let request = Request::post(uri).header("X-Honeycomb-Team", self.api_key.clone());
 
         let buf = serde_json::to_vec(&events).unwrap();
 
         request.body(buf).map_err(Into::into)
-    }
-}
-
-impl HoneycombConfig {
-    fn build_uri(&self) -> Uri {
-        let uri = format!("{}/{}", HOST.clone(), self.dataset);
-
-        uri.parse::<http::Uri>()
-            .expect("This should be a valid uri")
     }
 }
 

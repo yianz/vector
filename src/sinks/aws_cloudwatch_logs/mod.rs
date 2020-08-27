@@ -671,6 +671,7 @@ mod tests {
     use super::*;
     use crate::{
         dns::Resolver,
+        endpoint::Endpoint,
         event::{self, Event, Value},
         region::RegionOrEndpoint,
     };
@@ -778,7 +779,7 @@ mod tests {
 
     fn svc(config: CloudwatchLogsSinkConfig) -> CloudwatchLogsSvc {
         let config = CloudwatchLogsSinkConfig {
-            region: RegionOrEndpoint::with_endpoint("http://localhost:6000".into()),
+            region: RegionOrEndpoint::with_endpoint(Endpoint::from_static("http://localhost:6000")),
             ..config
         };
         let key = CloudwatchKey {

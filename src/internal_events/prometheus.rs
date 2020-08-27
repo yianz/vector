@@ -1,5 +1,6 @@
 use super::InternalEvent;
 use crate::sources::prometheus::parser::ParserError;
+use http::Uri;
 use metrics::{counter, timing};
 use std::borrow::Cow;
 use std::time::Instant;
@@ -55,7 +56,7 @@ impl InternalEvent for PrometheusRequestCompleted {
 #[derive(Debug)]
 pub struct PrometheusParseError<'a> {
     pub error: ParserError,
-    pub url: String,
+    pub url: &'a Uri,
     pub body: Cow<'a, str>,
 }
 
@@ -78,12 +79,12 @@ impl<'a> InternalEvent for PrometheusParseError<'a> {
 }
 
 #[derive(Debug)]
-pub struct PrometheusErrorResponse {
+pub struct PrometheusErrorResponse<'a> {
     pub code: hyper::StatusCode,
-    pub url: String,
+    pub url: &'a Uri,
 }
 
-impl InternalEvent for PrometheusErrorResponse {
+impl InternalEvent for PrometheusErrorResponse<'_> {
     fn emit_logs(&self) {
         error!(message = "HTTP error response.", url = %self.url, code = %self.code);
     }
@@ -97,12 +98,12 @@ impl InternalEvent for PrometheusErrorResponse {
 }
 
 #[derive(Debug)]
-pub struct PrometheusHttpError {
+pub struct PrometheusHttpError<'a> {
     pub error: hyper::Error,
-    pub url: String,
+    pub url: &'a Uri,
 }
 
-impl InternalEvent for PrometheusHttpError {
+impl InternalEvent for PrometheusHttpError<'_> {
     fn emit_logs(&self) {
         error!(message = "HTTP request processing error.", url = %self.url, error = %self.error);
     }

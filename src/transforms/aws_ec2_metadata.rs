@@ -1,6 +1,7 @@
 use super::Transform;
 use crate::{
     config::{DataType, TransformConfig, TransformContext, TransformDescription},
+    endpoint::Endpoint,
     event::Event,
     sinks::util::http::HttpClient,
 };
@@ -74,14 +75,14 @@ lazy_static::lazy_static! {
 
     static ref API_TOKEN: PathAndQuery = PathAndQuery::from_static("/latest/api/token");
     static ref TOKEN_HEADER: Bytes = Bytes::from("X-aws-ec2-metadata-token");
-    static ref HOST: Uri = Uri::from_static("http://169.254.169.254");
+    static ref HOST: Endpoint = Endpoint::from_static("http://169.254.169.254");
 }
 
 #[derive(Default, Debug, Serialize, Deserialize)]
 pub struct Ec2Metadata {
     // Deprecated name
     #[serde(alias = "host")]
-    endpoint: Option<String>,
+    endpoint: Option<Endpoint>,
     namespace: Option<String>,
     refresh_interval_secs: Option<u64>,
     fields: Option<Vec<String>>,
@@ -133,11 +134,7 @@ impl TransformConfig for Ec2Metadata {
 
         let keys = Keys::new(&namespace);
 
-        let host = self
-            .endpoint
-            .clone()
-            .map(|s| Uri::from_maybe_shared(s).unwrap())
-            .unwrap_or_else(|| HOST.clone());
+        let host = self.endpoint.clone().unwrap_or_else(|| HOST.clone()).into();
 
         let refresh_interval = self
             .refresh_interval_secs

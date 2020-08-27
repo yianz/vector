@@ -14,13 +14,14 @@
 
 use crate::{
     config::{DataType, SinkConfig, SinkContext, SinkDescription},
+    endpoint::Endpoint,
     event::{self, Event, Value},
     runtime::FutureExt,
     sinks::util::{
         buffer::loki::{LokiBuffer, LokiEvent, LokiRecord},
         encoding::{EncodingConfigWithDefault, EncodingConfiguration},
         http::{Auth, BatchedHttpSink, HttpClient, HttpSink},
-        BatchConfig, BatchSettings, TowerRequestConfig, UriSerde,
+        BatchConfig, BatchSettings, TowerRequestConfig,
     },
     template::Template,
     tls::{TlsOptions, TlsSettings},
@@ -33,7 +34,7 @@ use std::collections::HashMap;
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct LokiConfig {
-    endpoint: UriSerde,
+    endpoint: Endpoint,
     #[serde(default)]
     encoding: EncodingConfigWithDefault<Encoding>,
 
@@ -168,7 +169,7 @@ impl HttpSink for LokiConfig {
     async fn build_request(&self, json: Self::Output) -> crate::Result<http::Request<Vec<u8>>> {
         let body = serde_json::to_vec(&json).unwrap();
 
-        let uri = format!("{}loki/api/v1/push", self.endpoint);
+        let uri = self.endpoint.build_uri_static("/loki/api/v1/push");
 
         let mut req = http::Request::post(uri).header("Content-Type", "application/json");
 
@@ -187,7 +188,7 @@ impl HttpSink for LokiConfig {
 }
 
 async fn healthcheck(config: LokiConfig, mut client: HttpClient) -> crate::Result<()> {
-    let uri = format!("{}ready", config.endpoint);
+    let uri = config.endpoint.build_uri_static("/ready");
 
     let req = http::Request::get(uri).body(hyper::Body::empty()).unwrap();
 

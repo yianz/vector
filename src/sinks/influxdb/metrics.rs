@@ -1,5 +1,6 @@
 use crate::{
     config::{DataType, SinkConfig, SinkContext, SinkDescription},
+    endpoint::Endpoint,
     event::metric::{Metric, MetricValue},
     sinks::influxdb::{
         encode_namespace, encode_timestamp, healthcheck, influx_line_protocol, influxdb_settings,
@@ -31,7 +32,7 @@ struct InfluxDBSvc {
 #[serde(deny_unknown_fields)]
 pub struct InfluxDBConfig {
     pub namespace: String,
-    pub endpoint: String,
+    pub endpoint: Endpoint,
     #[serde(flatten)]
     pub influxdb1_settings: Option<InfluxDB1Settings>,
     #[serde(flatten)]

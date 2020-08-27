@@ -1,5 +1,6 @@
 use crate::{
     config::{DataType, SinkConfig, SinkContext, SinkDescription},
+    endpoint::Endpoint,
     sinks::elasticsearch::{ElasticSearchConfig, Encoding},
     sinks::util::{
         encoding::EncodingConfigWithDefault, BatchConfig, Compression, TowerRequestConfig,
@@ -14,7 +15,7 @@ pub struct SematextLogsConfig {
     region: Option<Region>,
     // Deprecated name
     #[serde(alias = "host")]
-    endpoint: Option<String>,
+    endpoint: Option<Endpoint>,
     token: String,
 
     #[serde(
@@ -45,9 +46,13 @@ pub enum Region {
 impl SinkConfig for SematextLogsConfig {
     fn build(&self, cx: SinkContext) -> crate::Result<(super::RouterSink, super::Healthcheck)> {
         let endpoint = match (&self.endpoint, &self.region) {
-            (Some(host), None) => host.clone(),
-            (None, Some(Region::Na)) => "https://logsene-receiver.sematext.com".to_owned(),
-            (None, Some(Region::Eu)) => "https://logsene-receiver.eu.sematext.com".to_owned(),
+            (Some(endpoint), None) => endpoint.clone(),
+            (None, Some(Region::Na)) => {
+                Endpoint::from_static("https://logsene-receiver.sematext.com")
+            }
+            (None, Some(Region::Eu)) => {
+                Endpoint::from_static("https://logsene-receiver.eu.sematext.com")
+            }
             (None, None) => {
                 return Err("Either `region` or `host` must be set.".into());
             }
@@ -123,7 +128,7 @@ mod tests {
         let addr = test_util::next_addr();
         // Swap out the host so we can force send it
         // to our local server
-        config.endpoint = Some(format!("http://{}", addr));
+        config.endpoint = Some(Endpoint::from_str(&format!("http://{}", addr)).unwrap());
         config.region = None;
 
         let (sink, _) = config.build(cx).unwrap();

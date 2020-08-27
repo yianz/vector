@@ -1,6 +1,6 @@
 #![cfg(feature = "rusoto_core")]
 
-use http::{uri::InvalidUri, Uri};
+use crate::endpoint::Endpoint;
 use rusoto_core::{region::ParseRegionError, Region};
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
@@ -11,7 +11,7 @@ use std::str::FromStr;
 #[serde(default)]
 pub struct RegionOrEndpoint {
     region: Option<String>,
-    endpoint: Option<String>,
+    endpoint: Option<Endpoint>,
 }
 
 impl RegionOrEndpoint {
@@ -22,7 +22,7 @@ impl RegionOrEndpoint {
         }
     }
 
-    pub fn with_endpoint(endpoint: String) -> Self {
+    pub fn with_endpoint(endpoint: Endpoint) -> Self {
         Self {
             region: None,
             endpoint: Some(endpoint),
@@ -32,8 +32,6 @@ impl RegionOrEndpoint {
 
 #[derive(Debug, Snafu)]
 pub enum ParseError {
-    #[snafu(display("Failed to parse custom endpoint as URI: {}", source))]
-    EndpointParseError { source: InvalidUri },
     #[snafu(display("{}", source))]
     RegionParseError { source: ParseRegionError },
     #[snafu(display("Only one of 'region' or 'endpoint' can be specified"))]
@@ -63,24 +61,13 @@ impl TryFrom<RegionOrEndpoint> for Region {
 }
 
 /// Translate an endpoint URL into a Region
-pub fn region_from_endpoint(endpoint: &str) -> Result<Region, ParseError> {
-    let uri = endpoint.parse::<Uri>().context(EndpointParseError)?;
-    let name = uri
-        .host()
-        .and_then(region_name_from_host)
-        .unwrap_or_else(|| Region::default().name().into());
-    let endpoint = strip_endpoint(&uri);
-    Ok(Region::Custom { name, endpoint })
-}
-
-/// Reconstitute the endpoint from the URI, but strip off all path components
-fn strip_endpoint(uri: &Uri) -> String {
-    let pq_len = uri
-        .path_and_query()
-        .map(|pq| pq.as_str().len())
-        .unwrap_or(0);
-    let endpoint = uri.to_string();
-    endpoint[..endpoint.len() - pq_len].to_string()
+pub fn region_from_endpoint(endpoint: &Endpoint) -> Result<Region, ParseError> {
+    let name =
+        region_name_from_host(endpoint.host()).unwrap_or_else(|| Region::default().name().into());
+    Ok(Region::Custom {
+        name,
+        endpoint: format!("{}", endpoint),
+    })
 }
 
 /// Translate a hostname into a region name by finding the first part of
@@ -180,7 +167,7 @@ mod tests {
     #[test]
     fn region_from_endpoint_localhost() {
         assert_eq!(
-            region_from_endpoint("http://localhost:9000").unwrap(),
+            region_from_endpoint(&Endpoint::from_static("http://localhost:9000")).unwrap(),
             Region::Custom {
                 name: "us-east-1".into(),
                 endpoint: "http://localhost:9000".into()
@@ -191,9 +178,9 @@ mod tests {
     #[test]
     fn region_from_endpoint_standard_region() {
         assert_eq!(
-            region_from_endpoint(
+            region_from_endpoint(&Endpoint::from_static(
                 "https://this-is-a-test-5dec2c2qbgsuekvsecuylqu.us-west-2.es.amazonaws.com"
-            )
+            ))
             .unwrap(),
             Region::Custom {
                 name: "us-west-2".into(),
@@ -207,14 +194,17 @@ mod tests {
     #[test]
     fn region_from_endpoint_without_scheme() {
         assert_eq!(
-            region_from_endpoint("ams3.digitaloceanspaces.com").unwrap(),
+            region_from_endpoint(&Endpoint::from_static("ams3.digitaloceanspaces.com")).unwrap(),
             Region::Custom {
                 name: "us-east-1".into(),
                 endpoint: "ams3.digitaloceanspaces.com".into()
             }
         );
         assert_eq!(
-            region_from_endpoint("https://ams3.digitaloceanspaces.com/").unwrap(),
+            region_from_endpoint(&Endpoint::from_static(
+                "https://ams3.digitaloceanspaces.com/"
+            ))
+            .unwrap(),
             Region::Custom {
                 name: "us-east-1".into(),
                 endpoint: "https://ams3.digitaloceanspaces.com".into()
@@ -225,7 +215,8 @@ mod tests {
     #[test]
     fn region_from_endpoint_strips_path_query() {
         assert_eq!(
-            region_from_endpoint("http://localhost:9000/path?query").unwrap(),
+            region_from_endpoint(&Endpoint::from_static("http://localhost:9000/path?query"))
+                .unwrap(),
             Region::Custom {
                 name: "us-east-1".into(),
                 endpoint: "http://localhost:9000".into()

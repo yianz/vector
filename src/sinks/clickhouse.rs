@@ -1,5 +1,6 @@
 use crate::{
     config::{DataType, SinkConfig, SinkContext, SinkDescription},
+    endpoint::Endpoint,
     event::Event,
     sinks::util::{
         encoding::{EncodingConfigWithDefault, EncodingConfiguration},
@@ -12,18 +13,17 @@ use crate::{
 use bytes::Bytes;
 use futures::{FutureExt, TryFutureExt};
 use futures01::Sink;
-use http::{Request, StatusCode, Uri};
+use http::{uri::InvalidUri, Request, StatusCode, Uri};
 use hyper::Body;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
-use snafu::ResultExt;
 
 #[derive(Deserialize, Serialize, Debug, Clone, Default)]
 #[serde(deny_unknown_fields)]
 pub struct ClickhouseConfig {
     // Deprecated name
     #[serde(alias = "host")]
-    pub endpoint: String,
+    pub endpoint: Endpoint,
     pub table: String,
     pub database: Option<String>,
     #[serde(default = "Compression::default_gzip")]
@@ -136,7 +136,7 @@ impl HttpSink for ClickhouseConfig {
 
 async fn healthcheck(mut client: HttpClient, config: ClickhouseConfig) -> crate::Result<()> {
     // TODO: check if table exists?
-    let uri = format!("{}/?query=SELECT%201", config.endpoint);
+    let uri = config.endpoint.build_uri_static("/?query=SELECT%201");
     let mut request = Request::get(uri).body(Body::empty()).unwrap();
 
     if let Some(auth) = &config.auth {
@@ -151,7 +151,7 @@ async fn healthcheck(mut client: HttpClient, config: ClickhouseConfig) -> crate:
     }
 }
 
-fn encode_uri(host: &str, database: &str, table: &str) -> crate::Result<Uri> {
+fn encode_uri(endpoint: &Endpoint, database: &str, table: &str) -> Result<Uri, InvalidUri> {
     let query = url::form_urlencoded::Serializer::new(String::new())
         .append_pair(
             "query",
@@ -164,13 +164,7 @@ fn encode_uri(host: &str, database: &str, table: &str) -> crate::Result<Uri> {
         )
         .finish();
 
-    let url = if host.ends_with('/') {
-        format!("{}?{}", host, query)
-    } else {
-        format!("{}/?{}", host, query)
-    };
-
-    Ok(url.parse::<Uri>().context(super::UriParseError)?)
+    endpoint.build_uri("/", &query)
 }
 
 #[derive(Clone)]
@@ -216,16 +210,31 @@ mod tests {
 
     #[test]
     fn encode_valid() {
-        let uri = encode_uri("http://localhost:80", "my_database", "my_table").unwrap();
+        let uri = encode_uri(
+            &Endpoint::from_static("http://localhost:80"),
+            "my_database",
+            "my_table",
+        )
+        .unwrap();
         assert_eq!(uri, "http://localhost:80/?query=INSERT+INTO+%22my_database%22.%22my_table%22+FORMAT+JSONEachRow");
 
-        let uri = encode_uri("http://localhost:80", "my_database", "my_\"table\"").unwrap();
+        let uri = encode_uri(
+            &Endpoint::from_static("http://localhost:80"),
+            "my_database",
+            "my_\"table\"",
+        )
+        .unwrap();
         assert_eq!(uri, "http://localhost:80/?query=INSERT+INTO+%22my_database%22.%22my_%5C%22table%5C%22%22+FORMAT+JSONEachRow");
     }
 
     #[test]
     fn encode_invalid() {
-        encode_uri("localhost:80", "my_database", "my_table").unwrap_err();
+        encode_uri(
+            &Endpoint::from_static("localhost:80"),
+            "my_database",
+            "my_table",
+        )
+        .unwrap_err();
     }
 }
 

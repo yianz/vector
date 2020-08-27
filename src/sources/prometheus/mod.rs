@@ -1,5 +1,6 @@
 use crate::{
     config::{self, GlobalOptions},
+    endpoint::Endpoint,
     internal_events::{
         PrometheusErrorResponse, PrometheusEventReceived, PrometheusHttpError,
         PrometheusParseError, PrometheusRequestCompleted,
@@ -12,10 +13,10 @@ use futures::{
     future, stream, FutureExt, StreamExt, TryFutureExt,
 };
 use futures01::Sink;
+use http::Uri;
 use hyper::{Body, Client, Request};
 use hyper_openssl::HttpsConnector;
 use serde::{Deserialize, Serialize};
-use snafu::ResultExt;
 use std::time::{Duration, Instant};
 
 pub mod parser;
@@ -24,7 +25,7 @@ pub mod parser;
 struct PrometheusConfig {
     // Deprecated name
     #[serde(alias = "hosts")]
-    endpoints: Vec<String>,
+    endpoints: Vec<Endpoint>,
     #[serde(default = "default_scrape_interval_secs")]
     scrape_interval_secs: u64,
 }
@@ -42,11 +43,11 @@ impl crate::config::SourceConfig for PrometheusConfig {
         shutdown: ShutdownSignal,
         out: Pipeline,
     ) -> crate::Result<super::Source> {
-        let mut urls = Vec::new();
-        for host in self.endpoints.iter() {
-            let base_uri = host.parse::<http::Uri>().context(super::UriParseError)?;
-            urls.push(format!("{}metrics", base_uri));
-        }
+        let urls = self
+            .endpoints
+            .iter()
+            .map(|endpoint| endpoint.build_uri_static("/metrics"))
+            .collect();
         Ok(prometheus(urls, self.scrape_interval_secs, shutdown, out))
     }
 
@@ -60,7 +61,7 @@ impl crate::config::SourceConfig for PrometheusConfig {
 }
 
 fn prometheus(
-    urls: Vec<String>,
+    urls: Vec<Uri>,
     interval: u64,
     shutdown: ShutdownSignal,
     out: Pipeline,
@@ -111,7 +112,7 @@ fn prometheus(
                                 Err(error) => {
                                     emit!(PrometheusParseError {
                                         error,
-                                        url: url.clone(),
+                                        url: &url,
                                         body,
                                     });
                                     None
@@ -121,15 +122,12 @@ fn prometheus(
                         Ok((header, _)) => {
                             emit!(PrometheusErrorResponse {
                                 code: header.status,
-                                url: url.clone(),
+                                url: &url,
                             });
                             None
                         }
                         Err(error) => {
-                            emit!(PrometheusHttpError {
-                                error,
-                                url: url.clone(),
-                            });
+                            emit!(PrometheusHttpError { error, url: &url });
                             None
                         }
                     })
@@ -209,7 +207,7 @@ mod test {
         config.add_source(
             "in",
             PrometheusConfig {
-                endpoints: vec![format!("http://{}", in_addr)],
+                endpoints: vec![Endpoint::from_str(&format!("http://{}", in_addr)).unwrap()],
                 scrape_interval_secs: 1,
             },
         );

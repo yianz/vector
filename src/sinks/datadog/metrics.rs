@@ -1,5 +1,6 @@
 use crate::{
     config::{DataType, SinkConfig, SinkContext, SinkDescription},
+    endpoint::Endpoint,
     event::{
         metric::{Metric, MetricKind, MetricValue},
         Event,
@@ -12,19 +13,12 @@ use crate::{
 use chrono::{DateTime, Utc};
 use futures::{FutureExt, TryFutureExt};
 use futures01::Sink;
-use http::{uri::InvalidUri, Request, StatusCode, Uri};
+use http::{Request, StatusCode, Uri};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
-use snafu::{ResultExt, Snafu};
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicI64, Ordering::SeqCst};
-
-#[derive(Debug, Snafu)]
-enum BuildError {
-    #[snafu(display("Invalid host {:?}: {:?}", host, source))]
-    InvalidHost { host: String, source: InvalidUri },
-}
 
 #[derive(Clone)]
 struct DatadogState {
@@ -37,7 +31,7 @@ pub struct DatadogConfig {
     pub namespace: String,
     // Deprecated name
     #[serde(alias = "host", default = "default_endpoint")]
-    pub endpoint: String,
+    pub endpoint: Endpoint,
     pub api_key: String,
     #[serde(default)]
     pub batch: BatchConfig,
@@ -64,8 +58,8 @@ struct DatadogRequest {
     series: Vec<DatadogMetric>,
 }
 
-pub fn default_endpoint() -> String {
-    String::from("https://api.datadoghq.com")
+pub fn default_endpoint() -> Endpoint {
+    Endpoint::from_static("https://api.datadoghq.com")
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -171,18 +165,12 @@ impl HttpSink for DatadogSink {
     }
 }
 
-fn build_uri(host: &str) -> crate::Result<Uri> {
-    let uri = format!("{}/api/v1/series", host)
-        .parse::<Uri>()
-        .context(super::UriParseError)?;
-
-    Ok(uri)
+fn build_uri(endpoint: &Endpoint) -> Uri {
+    endpoint.build_uri_static("/api/v1/series")
 }
 
 async fn healthcheck(config: DatadogConfig, mut client: HttpClient) -> crate::Result<()> {
-    let uri = format!("{}/api/v1/validate", config.endpoint)
-        .parse::<Uri>()
-        .context(super::UriParseError)?;
+    let uri = config.endpoint.build_uri_static("/api/v1/validate");
 
     let request = Request::get(uri)
         .header("DD-API-KEY", config.api_key)

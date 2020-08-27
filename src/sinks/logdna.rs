@@ -1,10 +1,11 @@
 use crate::{
     config::{DataType, SinkConfig, SinkContext, SinkDescription},
+    endpoint::Endpoint,
     event::{self, Event},
     sinks::util::{
         encoding::EncodingConfigWithDefault,
         http::{Auth, BatchedHttpSink, HttpClient, HttpSink},
-        BatchConfig, BatchSettings, BoxedRawValue, JsonArrayBuffer, TowerRequestConfig, UriSerde,
+        BatchConfig, BatchSettings, BoxedRawValue, JsonArrayBuffer, TowerRequestConfig,
     },
 };
 use futures::{FutureExt, TryFutureExt};
@@ -15,7 +16,7 @@ use serde_json::json;
 use std::time::SystemTime;
 
 lazy_static::lazy_static! {
-    static ref HOST: UriSerde = Uri::from_static("https://logs.logdna.com").into();
+    static ref ENDPOINT: Endpoint = Endpoint::from_static("https://logs.logdna.com");
 }
 
 const PATH: &str = "/logs/ingest";
@@ -25,7 +26,7 @@ pub struct LogdnaConfig {
     api_key: String,
     // Deprecated name
     #[serde(alias = "host")]
-    endpoint: Option<UriSerde>,
+    endpoint: Option<Endpoint>,
 
     hostname: String,
     mac: Option<String>,
@@ -189,11 +190,10 @@ impl HttpSink for LogdnaConfig {
 
 impl LogdnaConfig {
     fn build_uri(&self, query: &str) -> Uri {
-        let host: Uri = self.endpoint.clone().unwrap_or_else(|| HOST.clone()).into();
-
-        let uri = format!("{}{}?{}", host, PATH, query);
-
-        uri.parse::<http::Uri>()
+        self.endpoint
+            .clone()
+            .unwrap_or_else(|| ENDPOINT.clone())
+            .build_uri(PATH, query)
             .expect("This should be a valid uri")
     }
 }
@@ -277,8 +277,8 @@ mod tests {
         let addr = test_util::next_addr();
         // Swap out the host so we can force send it
         // to our local server
-        let endpoint = format!("http://{}", addr).parse::<http::Uri>().unwrap();
-        config.endpoint = Some(endpoint.into());
+        let endpoint = Endpoint::from_str(&format!("http://{}", addr)).unwrap();
+        config.endpoint = Some(endpoint);
 
         let (sink, _) = config.build(cx).unwrap();
 

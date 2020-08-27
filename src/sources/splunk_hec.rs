@@ -755,6 +755,7 @@ mod tests {
     use crate::test_util::{self, collect_n, runtime};
     use crate::{
         config::{GlobalOptions, SinkConfig, SinkContext, SourceConfig},
+        endpoint::Endpoint,
         event::{self, Event},
         shutdown::ShutdownSignal,
         sinks::{
@@ -803,7 +804,7 @@ mod tests {
         compression: Compression,
     ) -> (RouterSink, Healthcheck) {
         HecSinkConfig {
-            endpoint: format!("http://{}", address),
+            endpoint: Endpoint::from_str(&format!("http://{}", address)).unwrap(),
             token: TOKEN.to_owned(),
             encoding: encoding.into(),
             compression,

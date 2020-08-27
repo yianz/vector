@@ -1,5 +1,6 @@
 use crate::{
     config::{DataType, SinkConfig, SinkContext, SinkDescription},
+    endpoint::Endpoint,
     event::{log_schema, Event, Value},
     sinks::{
         influxdb::{
@@ -24,7 +25,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 #[serde(deny_unknown_fields)]
 pub struct InfluxDBLogsConfig {
     pub namespace: String,
-    pub endpoint: String,
+    pub endpoint: Endpoint,
     #[serde(default)]
     pub tags: Vec<String>,
     #[serde(flatten)]
@@ -441,7 +442,7 @@ mod tests {
         let addr = test_util::next_addr();
         // Swap out the host so we can force send it
         // to our local server
-        let host = format!("http://{}", addr);
+        let host = Endpoint::from_str(&format!("http://{}", addr)).unwrap();
         config.endpoint = host;
 
         let (sink, _) = config.build(cx).unwrap();
@@ -505,7 +506,7 @@ mod tests {
         let addr = test_util::next_addr();
         // Swap out the host so we can force send it
         // to our local server
-        let host = format!("http://{}", addr);
+        let host = Endpoint::from_str(&format!("http://{}", addr)).unwrap();
         config.endpoint = host;
 
         let (sink, _) = config.build(cx).unwrap();

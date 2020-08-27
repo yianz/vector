@@ -1,5 +1,4 @@
 use futures01::Future;
-use snafu::Snafu;
 
 #[cfg(feature = "sources-docker")]
 pub mod docker;
@@ -37,10 +36,3 @@ pub mod vector;
 mod util;
 
 pub type Source = Box<dyn Future<Item = (), Error = ()> + Send>;
-
-/// Common build errors
-#[derive(Debug, Snafu)]
-enum BuildError {
-    #[snafu(display("URI parse error: {}", source))]
-    UriParseError { source: ::http::uri::InvalidUri },
-}

@@ -1,5 +1,6 @@
 use crate::{
     config::{DataType, SinkConfig, SinkContext, SinkDescription},
+    endpoint::Endpoint,
     event::{self, Event, LogEvent, Value},
     internal_events::{
         SplunkEventEncodeError, SplunkEventSent, SplunkSourceMissingKeys,
@@ -15,13 +16,12 @@ use crate::{
 };
 use futures::{FutureExt, TryFutureExt};
 use futures01::Sink;
-use http::{Request, StatusCode, Uri};
+use http::{Request, StatusCode};
 use hyper::Body;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use snafu::{ResultExt, Snafu};
-use std::convert::TryFrom;
+use snafu::Snafu;
 use string_cache::DefaultAtom as Atom;
 
 #[derive(Debug, Snafu)]
@@ -36,7 +36,7 @@ pub struct HecSinkConfig {
     pub token: String,
     // Deprecated name
     #[serde(alias = "host")]
-    pub endpoint: String,
+    pub endpoint: Endpoint,
     #[serde(default = "default_host_key")]
     pub host_key: Atom,
     #[serde(default)]
@@ -86,8 +86,6 @@ inventory::submit! {
 #[typetag::serde(name = "splunk_hec")]
 impl SinkConfig for HecSinkConfig {
     fn build(&self, cx: SinkContext) -> crate::Result<(super::RouterSink, super::Healthcheck)> {
-        validate_host(&self.endpoint)?;
-
         let batch = BatchSettings::default()
             .bytes(bytesize::mib(1u64))
             .timeout(1)
@@ -208,8 +206,7 @@ impl HttpSink for HecSinkConfig {
     }
 
     async fn build_request(&self, events: Self::Output) -> crate::Result<Request<Vec<u8>>> {
-        let uri =
-            build_uri(&self.endpoint, "/services/collector/event").expect("Unable to parse URI");
+        let uri = self.endpoint.build_uri_static("/services/collector/event");
 
         let mut builder = Request::post(uri)
             .header("Content-Type", "application/json")
@@ -232,8 +229,9 @@ enum HealthcheckError {
 }
 
 pub async fn healthcheck(config: HecSinkConfig, mut client: HttpClient) -> crate::Result<()> {
-    let uri = build_uri(&config.endpoint, "/services/collector/health/1.0")
-        .context(super::UriParseError)?;
+    let uri = config
+        .endpoint
+        .build_uri_static("/services/collector/health/1.0");
 
     let request = Request::get(uri)
         .header("Authorization", format!("Splunk {}", config.token))
@@ -247,19 +245,6 @@ pub async fn healthcheck(config: HecSinkConfig, mut client: HttpClient) -> crate
         StatusCode::SERVICE_UNAVAILABLE => Err(HealthcheckError::QueuesFull.into()),
         other => Err(super::HealthcheckError::UnexpectedStatus { status: other }.into()),
     }
-}
-
-pub fn validate_host(host: &str) -> crate::Result<()> {
-    let uri = Uri::try_from(host).context(super::UriParseError)?;
-
-    match uri.scheme() {
-        Some(_) => Ok(()),
-        None => Err(Box::new(BuildError::UriMissingScheme)),
-    }
-}
-
-fn build_uri(host: &str, path: &str) -> Result<Uri, http::uri::InvalidUri> {
-    format!("{}{}", host.trim_end_matches('/'), path).parse::<Uri>()
 }
 
 #[cfg(test)]
@@ -367,25 +352,6 @@ mod tests {
             format!("hec_event.time = {}, now = {}", hec_event.time, now)
         );
         assert_eq!((hec_event.time * 1000f64).fract(), 0f64);
-    }
-
-    #[test]
-    fn splunk_validate_host() {
-        let valid = "http://localhost:8888".to_string();
-        let invalid_scheme = "localhost:8888".to_string();
-        let invalid_uri = "iminvalidohnoes".to_string();
-
-        assert!(validate_host(&valid).is_ok());
-        assert!(validate_host(&invalid_scheme).is_err());
-        assert!(validate_host(&invalid_uri).is_err());
-    }
-
-    #[test]
-    fn splunk_build_uri() {
-        let uri = build_uri("http://test.com/", "/a");
-
-        assert!(uri.is_ok());
-        assert_eq!(format!("{}", uri.unwrap()), "http://test.com/a");
     }
 }
 

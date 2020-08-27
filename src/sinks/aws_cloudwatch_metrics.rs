@@ -263,6 +263,7 @@ fn tags_to_dimensions(tags: BTreeMap<String, String>) -> Vec<Dimension> {
 mod tests {
     use super::*;
     use crate::dns::Resolver;
+    use crate::endpoint::Endpoint;
     use crate::event::metric::{Metric, MetricKind, MetricValue, StatisticKind};
     use chrono::offset::TimeZone;
     use pretty_assertions::assert_eq;
@@ -271,7 +272,7 @@ mod tests {
     fn config() -> CloudWatchMetricsSinkConfig {
         CloudWatchMetricsSinkConfig {
             namespace: "vector".into(),
-            region: RegionOrEndpoint::with_endpoint("local".to_owned()),
+            region: RegionOrEndpoint::with_endpoint(Endpoint::from_static("local")),
             ..Default::default()
         }
     }
