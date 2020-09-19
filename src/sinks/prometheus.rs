@@ -262,7 +262,7 @@ fn encode_metric_datum(
     s
 }
 
-pub fn handle(
+fn handle(
     req: Request<Body>,
     namespace: Option<&str>,
     buckets: &[f64],
