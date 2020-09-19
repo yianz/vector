@@ -262,7 +262,7 @@ fn encode_metric_datum(
     s
 }
 
-fn handle(
+pub fn handle(
     req: Request<Body>,
     namespace: Option<&str>,
     buckets: &[f64],
@@ -380,6 +380,16 @@ impl Sink for PrometheusSink {
 
         let item = event.into_metric();
         let mut metrics = self.metrics.write().unwrap();
+
+        let up = Metric {
+            name: "up".to_owned(),
+            timestamp: Some(Utc::now()),
+            tags: None,
+            kind: MetricKind::Absolute,
+            value: MetricValue::Gauge { value: 1.0 },
+        };
+
+        metrics.insert(MetricEntry(up));
 
         match item.kind {
             MetricKind::Incremental => {
