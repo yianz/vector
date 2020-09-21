@@ -991,7 +991,7 @@ init-target-dir: ## Create target directory owned by the current user
 load-qemu-binfmt: ## Load `binfmt-misc` kernel module which required to use `qemu-user`
 	$(CONTAINER_TOOL) build -f scripts/ci-docker-images/loader-qemu-binfmt/Dockerfile \
 	 -t timberio/loader-qemu-binfmt .
-	$(CONTAINER_TOOL) run --priviledged -v $(PWD):$(PWD) timberio/loader-qemu-binfmt dpkg-reconfigure qemu-user-binfmt
+	$(CONTAINER_TOOL) run --privileged -v $(PWD):$(PWD) timberio/loader-qemu-binfmt dpkg-reconfigure qemu-user-binfmt
 
 .PHONY: signoff
 signoff: ## Signsoff all previous commits since branch creation
