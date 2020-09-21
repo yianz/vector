@@ -182,11 +182,28 @@ build-aarch64-unknown-linux-gnu: target/aarch64-unknown-linux-gnu/release/vector
 
 .PHONY: build-x86_64-unknown-linux-musl
 build-x86_64-unknown-linux-musl: ## Build static binary in release mode for the x86_64 architecture
-	$(RUN) build-x86_64-unknown-linux-musl
+	$(CONTAINER_TOOL) build -f scripts/ci-docker-images/builder-x86_64-unknown-linux-musl/Dockerfile \
+	 -t timberio/builder-x86_64-unknown-linux-gnu .
+	$(CONTAINER_TOOL) run -e NATIVE_BUILD="false" \
+	 -e TARGET=x86_64-unknown-linux-musl -e FEATURES=default-musl \
+	 -e CARGO_TERM_COLOR=always -e TARGET=x86_64-unknown-linux-gnu \
+	 -w $(PWD) -v $(PWD):$(PWD) \
+	 -v $(PWD)/target/x86_64-unknown-linux-musl/cargo/registry:/opt/rust/cargo/registry \
+     -v $(PWD)/target/x86_64-unknown-linux-musl/cargo/git:/opt/rust/cargo/git \
+     -v $(PWD)/target/x86_64-unknown-linux-musl/rustup/tmp:/opt/rust/rustup/tmp \
+	 timberio/builder-x86_64-unknown-linux-gnu $(PWD)/scripts/build.sh
 
 .PHONY: build-aarch64-unknown-linux-musl
 build-aarch64-unknown-linux-musl: load-qemu-binfmt ## Build static binary in release mode for the aarch64 architecture
-	$(RUN) build-aarch64-unknown-linux-musl
+	$(CONTAINER_TOOL) build -f scripts/ci-docker-images/builder-aarch64-unknown-linux-musl/Dockerfile \
+	 -t timberio/builder-aarch64-unknown-linux-musl .
+	$(CONTAINER_TOOL) run -e TARGET=aarch64-unknown-linux-musl \
+	 -e FEATURES=default-musl -e NATIVE_BUILD="false" -e CARGO_TERM_COLOR=always \
+	 -w $(PWD) -v $(PWD):$(PWD) \
+	 -v $(PWD)/target/aarch64-unknown-linux-musl/cargo/registry:/opt/rust/cargo/registry \
+     -v $(PWD)/target/aarch64-unknown-linux-musl/cargo/git:/opt/rust/cargo/git \
+     -v $(PWD)/target/aarch64-unknown-linux-musl/rustup/tmp:/opt/rust/rustup/tmp \
+	 timberio/builder-aarch64-unknown-linux-musl $(PWD)/scripts/build.sh
 
 ##@ Cross Compiling
 .PHONY: cross-enable
@@ -813,11 +830,26 @@ package-x86_64-unknown-linux-gnu: target/artifacts/vector-x86_64-unknown-linux-g
 
 .PHONY: package-x86_64-unknown-linux-musl
 package-x86_64-unknown-linux-musl: build-x86_64-unknown-linux-musl ## Build the x86_64 musl archive
-	$(RUN) package-x86_64-unknown-linux-musl
+	$(CONTAINER_TOOL) build -f scripts/ci-docker-images/builder-x86_64-unknown-linux-musl/Dockerfile \
+	 -t timberio/builder-x86_64-unknown-linux-gnu .
+	$(CONTAINER_TOOL) run -e TARGET=x86_64-unknown-linux-gnu \
+	 -w $(PWD) -v $(PWD):$(PWD) \
+	 -v $(PWD)/target/x86_64-unknown-linux-musl/cargo/registry:/opt/rust/cargo/registry \
+     -v $(PWD)/target/x86_64-unknown-linux-musl/cargo/git:/opt/rust/cargo/git \
+     -v $(PWD)/target/x86_64-unknown-linux-musl/rustup/tmp:/opt/rust/rustup/tmp \
+	 timberio/builder-x86_64-unknown-linux-gnu $(PWD)/scripts/package-archive.sh
 
 .PHONY: package-aarch64-unknown-linux-musl
 package-aarch64-unknown-linux-musl: build-aarch64-unknown-linux-musl ## Build an archive of the aarch64-unknown-linux-gnu triple.
-	$(RUN) package-aarch64-unknown-linux-musl
+	$(CONTAINER_TOOL) build -f scripts/ci-docker-images/builder-aarch64-unknown-linux-musl/Dockerfile \
+	 -t timberio/builder-aarch64-unknown-linux-musl .
+	$(CONTAINER_TOOL) run -e TARGET=aarch64-unknown-linux-musl \
+	 -e FEATURES=default-musl -e NATIVE_BUILD="false" -e CARGO_TERM_COLOR=always \
+	 -w $(PWD) -v $(PWD):$(PWD) \
+	 -v $(PWD)/target/aarch64-unknown-linux-musl/cargo/registry:/opt/rust/cargo/registry \
+     -v $(PWD)/target/aarch64-unknown-linux-musl/cargo/git:/opt/rust/cargo/git \
+     -v $(PWD)/target/aarch64-unknown-linux-musl/rustup/tmp:/opt/rust/rustup/tmp \
+	 timberio/builder-aarch64-unknown-linux-musl $(PWD)/scripts/package-archive.sh
 
 .PHONY: package-aarch64-unknown-linux-gnu
 package-aarch64-unknown-linux-gnu: target/artifacts/vector-aarch64-unknown-linux-gnu.tar.gz ## Build the aarch64 archive
@@ -831,21 +863,41 @@ package-deb: ## Build the deb package
 
 .PHONY: package-deb-x86_64
 package-deb-x86_64: package-x86_64-unknown-linux-gnu ## Build the x86_64 deb package
-	$(RUN) package-deb-x86_64
+	$(CONTAINER_TOOL) build -f scripts/ci-docker-images/builder-x86_64-unknown-linux-musl/Dockerfile \
+	 -t timberio/builder-x86_64-unknown-linux-gnu .
+	$(CONTAINER_TOOL) run -e TARGET=x86_64-unknown-linux-gnu \
+	 -w $(PWD) -v $(PWD):$(PWD) \
+	 -v $(PWD)/target/x86_64-unknown-linux-musl/cargo/registry:/opt/rust/cargo/registry \
+     -v $(PWD)/target/x86_64-unknown-linux-musl/cargo/git:/opt/rust/cargo/git \
+     -v $(PWD)/target/x86_64-unknown-linux-musl/rustup/tmp:/opt/rust/rustup/tmp \
+	 timberio/builder-x86_64-unknown-linux-gnu $(PWD)/scripts/package-deb.sh
 
 .PHONY: package-deb-aarch64
 package-deb-aarch64: package-aarch64-unknown-linux-musl  ## Build the aarch64 deb package
-	$(RUN) package-deb-aarch64
+	$(CONTAINER_TOOL) build -f scripts/ci-docker-images/builder-aarch64-unknown-linux-musl/Dockerfile \
+	 -t timberio/builder-aarch64-unknown-linux-musl .
+	$(CONTAINER_TOOL) run -e TARGET=aarch64-unknown-linux-musl \
+	 -w $(PWD) -v $(PWD):$(PWD) \
+	 -v $(PWD)/target/aarch64-unknown-linux-musl/cargo/registry:/opt/rust/cargo/registry \
+     -v $(PWD)/target/aarch64-unknown-linux-musl/cargo/git:/opt/rust/cargo/git \
+     -v $(PWD)/target/aarch64-unknown-linux-musl/rustup/tmp:/opt/rust/rustup/tmp \
+	 timberio/builder-aarch64-unknown-linux-musl $(PWD)/scripts/package-deb.sh
 
 # rpms
 
 .PHONY: package-rpm-x86_64
 package-rpm-x86_64: package-x86_64-unknown-linux-gnu ## Build the x86_64 rpm package
-	$(RUN) package-rpm-x86_64
+	$(CONTAINER_TOOL) build -f scripts/ci-docker-images/packager-rpm/Dockerfile \
+	 -t timberio/x86_64-unknown-linux-gnu .
+	$(CONTAINER_TOOL) run -e TARGET=x86_64-unknown-linux-gnu -w $(PWD) -v $(PWD):$(PWD) \
+	 timberio/aarch64-unknown-linux-musl $(PWD)/scripts/package-rpm.sh
 
 .PHONY: package-rpm-aarch64
 package-rpm-aarch64: package-aarch64-unknown-linux-musl ## Build the aarch64 rpm package
-	$(RUN) package-rpm-aarch64
+	$(CONTAINER_TOOL) build -f scripts/ci-docker-images/packager-rpm/Dockerfile \
+	 -t timberio/aarch64-unknown-linux-musl .
+	$(CONTAINER_TOOL) run -e TARGET=aarch64-unknown-linux-musl -w $(PWD) -v $(PWD):$(PWD) \
+	 timberio/aarch64-unknown-linux-musl $(PWD)/scripts/package-rpm.sh
 
 ##@ Releasing
 
@@ -900,50 +952,21 @@ verify: verify-rpm verify-deb ## Default target, verify all packages
 .PHONY: verify-rpm
 verify-rpm: verify-rpm-amazonlinux-1 verify-rpm-amazonlinux-2 verify-rpm-centos-7 ## Verify all rpm packages
 
-.PHONY: verify-rpm-amazonlinux-1
-verify-rpm-amazonlinux-1: package-rpm-x86_64 ## Verify the rpm package on Amazon Linux 1
-	$(RUN) verify-rpm-amazonlinux-1
-
-.PHONY: verify-rpm-amazonlinux-2
-verify-rpm-amazonlinux-2: package-rpm-x86_64 ## Verify the rpm package on Amazon Linux 2
-	$(RUN) verify-rpm-amazonlinux-2
-
-.PHONY: verify-rpm-centos-7
-verify-rpm-centos-7: package-rpm-x86_64 ## Verify the rpm package on CentOS 7
-	$(RUN) verify-rpm-centos-7
+## Verify RPMs
+.PHONY: verify-rpm-%
+verify-rpm-%: package-rpm-x86_64
+	$(RUN) verify-rpm-%
 
 .PHONY: verify-deb
 verify-deb: ## Verify all deb packages
-verify-deb: verify-deb-artifact-on-deb-8 verify-deb-artifact-on-deb-9 verify-deb-artifact-on-deb-10
-verify-deb: verify-deb-artifact-on-ubuntu-14-04 verify-deb-artifact-on-ubuntu-16-04 verify-deb-artifact-on-ubuntu-18-04 verify-deb-artifact-on-ubuntu-20-04
+verify-deb: verify-deb-artifact-deb-8 verify-deb-artifact-deb-9 verify-deb-artifact-deb-10
+verify-deb: verify-deb-artifact-ubuntu-14-04 verify-deb-artifact-ubuntu-16-04
+verify-deb: verify-deb-artifact-ubuntu-18-04 verify-deb-artifact-ubuntu-20-04
 
-.PHONY: verify-deb-artifact-on-deb-8
-verify-deb-artifact-on-deb-8: package-deb-x86_64 ## Verify the deb package on Debian 8
-	$(RUN) verify-deb-artifact-on-deb-8
-
-.PHONY: verify-deb-artifact-on-deb-9
-verify-deb-artifact-on-deb-9: package-deb-x86_64 ## Verify the deb package on Debian 9
-	$(RUN) verify-deb-artifact-on-deb-9
-
-.PHONY: verify-deb-artifact-on-deb-10
-verify-deb-artifact-on-deb-10: package-deb-x86_64 ## Verify the deb package on Debian 10
-	$(RUN) verify-deb-artifact-on-deb-10
-
-.PHONY: verify-deb-artifact-on-ubuntu-14-04
-verify-deb-artifact-on-ubuntu-14-04: package-deb-x86_64 ## Verify the deb package on Ubuntu 14.04
-	$(RUN) verify-deb-artifact-on-ubuntu-14-04
-
-.PHONY: verify-deb-artifact-on-ubuntu-16-04
-verify-deb-artifact-on-ubuntu-16-04: package-deb-x86_64 ## Verify the deb package on Ubuntu 16.04
-	$(RUN) verify-deb-artifact-on-ubuntu-16-04
-
-.PHONY: verify-deb-artifact-on-ubuntu-18-04
-verify-deb-artifact-on-ubuntu-18-04: package-deb-x86_64 ## Verify the deb package on Ubuntu 18.04
-	$(RUN) verify-deb-artifact-on-ubuntu-18-04
-
-.PHONY: verify-deb-artifact-on-ubuntu-20-04
-verify-deb-artifact-on-ubuntu-20-04: package-deb-x86_64 ## Verify the deb package on Ubuntu 20.04
-	$(RUN) verify-deb-artifact-on-ubuntu-20-04
+## Verify DEBs
+.PHONY: verify-deb-%
+verify-deb-%: package-deb-x86_64
+	$(RUN) verify-deb-%
 
 ##@ Utility
 
@@ -966,7 +989,9 @@ init-target-dir: ## Create target directory owned by the current user
 
 .PHONY: load-qemu-binfmt
 load-qemu-binfmt: ## Load `binfmt-misc` kernel module which required to use `qemu-user`
-	$(RUN) load-qemu-binfmt
+	$(CONTAINER_TOOL) build -f scripts/ci-docker-images/loader-qemu-binfmt/Dockerfile \
+	 -t timberio/loader-qemu-binfmt .
+	$(CONTAINER_TOOL) run --priviledged -v $(PWD):$(PWD) timberio/loader-qemu-binfmt dpkg-reconfigure qemu-user-binfmt
 
 .PHONY: signoff
 signoff: ## Signsoff all previous commits since branch creation

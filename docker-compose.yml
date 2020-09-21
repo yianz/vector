@@ -4,134 +4,6 @@ services:
   # Jobs
   #
 
-  build-x86_64-unknown-linux-musl:
-    build:
-      context: .
-      dockerfile: scripts/ci-docker-images/builder-x86_64-unknown-linux-musl/Dockerfile
-    environment:
-      NATIVE_BUILD: "false"
-      TARGET: x86_64-unknown-linux-musl
-      FEATURES: default-musl
-      CARGO_TERM_COLOR: always
-    volumes:
-      - $PWD:$PWD
-      - ./target/x86_64-unknown-linux-musl/cargo/registry:/opt/rust/cargo/registry
-      - ./target/x86_64-unknown-linux-musl/cargo/git:/opt/rust/cargo/git
-      - ./target/x86_64-unknown-linux-musl/rustup/tmp:/opt/rust/rustup/tmp
-    working_dir: $PWD
-    user: $USER
-    command: scripts/build.sh
-
-  build-aarch64-unknown-linux-musl:
-    build:
-      context: .
-      dockerfile: scripts/ci-docker-images/builder-aarch64-unknown-linux-musl/Dockerfile
-    environment:
-      NATIVE_BUILD: "false"
-      TARGET: aarch64-unknown-linux-musl
-      FEATURES: default-musl
-      CARGO_TERM_COLOR: always
-    volumes:
-      - $PWD:$PWD
-      - ./target/aarch64-unknown-linux-musl/cargo/registry:/opt/rust/cargo/registry
-      - ./target/aarch64-unknown-linux-musl/cargo/git:/opt/rust/cargo/git
-      - ./target/aarch64-unknown-linux-musl/rustup/tmp:/opt/rust/rustup/tmp
-    working_dir: $PWD
-    user: $USER
-    command: scripts/build.sh
-
-  package-x86_64-unknown-linux-musl:
-    build:
-      context: .
-      dockerfile: scripts/ci-docker-images/builder-x86_64-unknown-linux-musl/Dockerfile
-    environment:
-      NATIVE_BUILD: "false"
-      TARGET: x86_64-unknown-linux-musl
-      FEATURES: default-musl
-      CARGO_TERM_COLOR: always
-    volumes:
-      - $PWD:$PWD
-      - ./target/x86_64-unknown-linux-musl/cargo/registry:/opt/rust/cargo/registry
-      - ./target/x86_64-unknown-linux-musl/cargo/git:/opt/rust/cargo/git
-      - ./target/x86_64-unknown-linux-musl/rustup/tmp:/opt/rust/rustup/tmp
-    working_dir: $PWD
-    user: $USER
-    command: ./scripts/package-archive.sh
-
-  package-aarch64-unknown-linux-musl:
-    build:
-      context: .
-      dockerfile: scripts/ci-docker-images/builder-aarch64-unknown-linux-musl/Dockerfile
-    environment:
-      NATIVE_BUILD: "false"
-      TARGET: aarch64-unknown-linux-musl
-      FEATURES: default-musl
-      CARGO_TERM_COLOR: always
-    volumes:
-      - $PWD:$PWD
-      - ./target/aarch64-unknown-linux-musl/cargo/registry:/opt/rust/cargo/registry
-      - ./target/aarch64-unknown-linux-musl/cargo/git:/opt/rust/cargo/git
-      - ./target/aarch64-unknown-linux-musl/rustup/tmp:/opt/rust/rustup/tmp
-    working_dir: $PWD
-    user: $USER
-    command: ./scripts/package-archive.sh
-
-  package-deb-x86_64:
-    build:
-      context: .
-      dockerfile: scripts/ci-docker-images/builder-x86_64-unknown-linux-gnu/Dockerfile
-      args:
-        USER: $USER
-    environment:
-      TARGET: x86_64-unknown-linux-gnu
-    volumes:
-      - $PWD:$PWD
-      - ./target/x86_64-unknown-linux-gnu/cargo/registry:/usr/local/cargo/registry
-      - ./target/x86_64-unknown-linux-gnu/cargo/git:/usr/local/cargo/git
-      - ./target/x86_64-unknown-linux-gnu/rustup/tmp:/usr/local/rustup/tmp
-    working_dir: $PWD
-    user: $USER
-    command: ./scripts/package-deb.sh
-
-  package-deb-aarch64:
-    build:
-      context: .
-      dockerfile: scripts/ci-docker-images/builder-aarch64-unknown-linux-musl/Dockerfile
-    environment:
-      TARGET: aarch64-unknown-linux-musl
-    volumes:
-      - $PWD:$PWD
-      - ./target/aarch64-unknown-linux-musl/cargo/registry:/opt/rust/cargo/registry
-      - ./target/aarch64-unknown-linux-musl/cargo/git:/opt/rust/cargo/git
-      - ./target/aarch64-unknown-linux-musl/rustup/tmp:/opt/rust/rustup/tmp
-    working_dir: $PWD
-    user: $USER
-    command: ./scripts/package-deb.sh
-
-  package-rpm-x86_64:
-    build:
-      context: .
-      dockerfile: scripts/ci-docker-images/packager-rpm/Dockerfile
-    environment:
-      TARGET: x86_64-unknown-linux-gnu
-    volumes:
-      - $PWD:$PWD
-    working_dir: $PWD
-    user: $USER
-    command: ./scripts/package-rpm.sh
-
-  package-rpm-aarch64:
-    build:
-      context: .
-      dockerfile: scripts/ci-docker-images/packager-rpm/Dockerfile
-    environment:
-      TARGET: aarch64-unknown-linux-musl
-    volumes:
-      - $PWD:$PWD
-    working_dir: $PWD
-    user: $USER
-    command: ./scripts/package-rpm.sh
-
   verify-rpm-amazonlinux-1:
     build:
       context: .
@@ -162,7 +34,7 @@ services:
     command:
       ["sh", "-ec", "rpm -i target/artifacts/*-x86_64.rpm && vector --version"]
 
-  verify-deb-artifact-on-deb-8:
+  verify-deb-artifact-deb-8:
     build:
       context: .
       dockerfile: scripts/ci-docker-images/verifier-deb-8/Dockerfile
@@ -172,7 +44,7 @@ services:
     command:
       ["sh", "-ec", "dpkg -i target/artifacts/*-amd64.deb && vector --version"]
 
-  verify-deb-artifact-on-deb-9:
+  verify-deb-artifact-deb-9:
     build:
       context: .
       dockerfile: scripts/ci-docker-images/verifier-deb-9/Dockerfile
@@ -182,7 +54,7 @@ services:
     command:
       ["sh", "-ec", "dpkg -i target/artifacts/*-amd64.deb && vector --version"]
 
-  verify-deb-artifact-on-deb-10:
+  verify-deb-artifact-deb-10:
     build:
       context: .
       dockerfile: scripts/ci-docker-images/verifier-deb-10/Dockerfile
@@ -192,7 +64,7 @@ services:
     command:
       ["sh", "-ec", "dpkg -i target/artifacts/*-amd64.deb && vector --version"]
 
-  verify-deb-artifact-on-ubuntu-14-04:
+  verify-deb-artifact-ubuntu-14-04:
     build:
       context: .
       dockerfile: scripts/ci-docker-images/verifier-ubuntu-14-04/Dockerfile
@@ -202,7 +74,7 @@ services:
     command:
       ["sh", "-ec", "dpkg -i target/artifacts/*-amd64.deb && vector --version"]
 
-  verify-deb-artifact-on-ubuntu-16-04:
+  verify-deb-artifact-ubuntu-16-04:
     build:
       context: .
       dockerfile: scripts/ci-docker-images/verifier-ubuntu-16-04/Dockerfile
@@ -212,7 +84,7 @@ services:
     command:
       ["sh", "-ec", "dpkg -i target/artifacts/*-amd64.deb && vector --version"]
 
-  verify-deb-artifact-on-ubuntu-18-04:
+  verify-deb-artifact-ubuntu-18-04:
     build:
       context: .
       dockerfile: scripts/ci-docker-images/verifier-ubuntu-18-04/Dockerfile
@@ -222,7 +94,7 @@ services:
     command:
       ["sh", "-ec", "dpkg -i target/artifacts/*-amd64.deb && vector --version"]
 
-  verify-deb-artifact-on-ubuntu-20-04:
+  verify-deb-artifact-ubuntu-20-04:
     build:
       context: .
       dockerfile: scripts/ci-docker-images/verifier-ubuntu-20-04/Dockerfile
@@ -250,10 +122,3 @@ services:
     working_dir: $PWD
     user: $USER
     entrypoint: ./scripts/target-graph.sh
-
-  load-qemu-binfmt:
-    build:
-      context: .
-      dockerfile: scripts/ci-docker-images/loader-qemu-binfmt/Dockerfile
-    privileged: true
-    command: dpkg-reconfigure qemu-user-binfmt

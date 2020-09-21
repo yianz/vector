@@ -20,6 +20,8 @@ set -euo pipefail
 # Env Vars
 #
 
+echo $(pwd)
+
 OVERWRITE=${OVERWRITE:-"true"}
 FEATURES="${FEATURES:-"default"}"
 NATIVE_BUILD="${NATIVE_BUILD:-"true"}"
