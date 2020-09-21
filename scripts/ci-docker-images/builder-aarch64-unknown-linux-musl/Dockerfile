@@ -286,6 +286,9 @@ ENV CC_x86_64_unknown_linux_gnu=gnu-cc
 ENV CXX_x86_64_unknown_linux_gnu=gnu-c++
 ENV LD_x86_64_unknown_linux_gnu=/usr/bin/ld
 ENV AR_x86_64_unknown_linux_gnu=/usr/bin/ar
+ENV krb5_cv_attr_constructor_destructor=yes
+ENV ac_cv_func_regcomp=yes
+ENV ac_cv_printf_positional=yes
 
 ENV CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=gnu-cc
 
