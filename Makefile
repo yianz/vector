@@ -199,7 +199,7 @@ build-aarch64-unknown-linux-musl: load-qemu-binfmt ## Build static binary in rel
 	 -t timberio/builder-aarch64-unknown-linux-musl .
 	$(CONTAINER_TOOL) run -e TARGET=aarch64-unknown-linux-musl \
 	 -e FEATURES=default-musl -e NATIVE_BUILD="false" -e CARGO_TERM_COLOR=always \
-	 -w $(PWD) -v $(PWD):$(PWD) \
+	 -w $(PWD) --privileged -v $(PWD):$(PWD) \
 	 -v $(PWD)/target/aarch64-unknown-linux-musl/cargo/registry:/opt/rust/cargo/registry \
      -v $(PWD)/target/aarch64-unknown-linux-musl/cargo/git:/opt/rust/cargo/git \
      -v $(PWD)/target/aarch64-unknown-linux-musl/rustup/tmp:/opt/rust/rustup/tmp \
@@ -845,7 +845,7 @@ package-aarch64-unknown-linux-musl: build-aarch64-unknown-linux-musl ## Build an
 	 -t timberio/builder-aarch64-unknown-linux-musl .
 	$(CONTAINER_TOOL) run -e TARGET=aarch64-unknown-linux-musl \
 	 -e FEATURES=default-musl -e NATIVE_BUILD="false" -e CARGO_TERM_COLOR=always \
-	 -w $(PWD) -v $(PWD):$(PWD) \
+	 -w $(PWD) --privileged -v $(PWD):$(PWD) \
 	 -v $(PWD)/target/aarch64-unknown-linux-musl/cargo/registry:/opt/rust/cargo/registry \
      -v $(PWD)/target/aarch64-unknown-linux-musl/cargo/git:/opt/rust/cargo/git \
      -v $(PWD)/target/aarch64-unknown-linux-musl/rustup/tmp:/opt/rust/rustup/tmp \
@@ -877,7 +877,7 @@ package-deb-aarch64: package-aarch64-unknown-linux-musl  ## Build the aarch64 de
 	$(CONTAINER_TOOL) build -f scripts/ci-docker-images/builder-aarch64-unknown-linux-musl/Dockerfile \
 	 -t timberio/builder-aarch64-unknown-linux-musl .
 	$(CONTAINER_TOOL) run -e TARGET=aarch64-unknown-linux-musl \
-	 -w $(PWD) -v $(PWD):$(PWD) \
+	 -w $(PWD) --privileged -v $(PWD):$(PWD) \
 	 -v $(PWD)/target/aarch64-unknown-linux-musl/cargo/registry:/opt/rust/cargo/registry \
      -v $(PWD)/target/aarch64-unknown-linux-musl/cargo/git:/opt/rust/cargo/git \
      -v $(PWD)/target/aarch64-unknown-linux-musl/rustup/tmp:/opt/rust/rustup/tmp \
@@ -896,7 +896,7 @@ package-rpm-x86_64: package-x86_64-unknown-linux-gnu ## Build the x86_64 rpm pac
 package-rpm-aarch64: package-aarch64-unknown-linux-musl ## Build the aarch64 rpm package
 	$(CONTAINER_TOOL) build -f scripts/ci-docker-images/packager-rpm/Dockerfile \
 	 -t timberio/aarch64-unknown-linux-musl .
-	$(CONTAINER_TOOL) run -e TARGET=aarch64-unknown-linux-musl -w $(PWD) -v $(PWD):$(PWD) \
+	$(CONTAINER_TOOL) run --privileged -e TARGET=aarch64-unknown-linux-musl -w $(PWD) -v $(PWD):$(PWD) \
 	 timberio/aarch64-unknown-linux-musl $(PWD)/scripts/package-rpm.sh
 
 ##@ Releasing
