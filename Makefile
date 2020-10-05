@@ -779,11 +779,13 @@ check-scripts: ## Check that scipts do not have common mistakes
 	${MAYBE_ENVIRONMENT_EXEC} ./scripts/check-scripts.sh
 
 .PHONY: check-helm
-check-helm: ## Check that the Helm Chart passes helm lint
-	${MAYBE_ENVIRONMENT_EXEC} helm lint distribution/helm/vector
+check-helm: ## Check that Helm charts pass helm lint
+check-helm: helm-dependencies-update
+	${MAYBE_ENVIRONMENT_EXEC} ./scripts/check-helm-lint.sh
 
 .PHONY: check-kubernetes-yaml
 check-kubernetes-yaml: ## Check that the generated Kubernetes YAML config is up to date
+check-kubernetes-yaml: helm-dependencies-update
 	${MAYBE_ENVIRONMENT_EXEC} ./scripts/kubernetes-yaml.sh check
 
 check-internal-events: ## Check that internal events satisfy patterns set in https://github.com/timberio/vector/blob/master/rfcs/2020-03-17-2064-event-driven-observability.md
@@ -1005,8 +1007,13 @@ version: ## Get the current Vector version
 git-hooks: ## Add Vector-local git hooks for commit sign-off
 	@scripts/install-git-hooks.sh
 
+.PHONY: helm-dependencies-update
+helm-dependencies-update: ## Recursively update the dependencies of the Helm charts in the proper order
+	${MAYBE_ENVIRONMENT_EXEC} ./scripts/helm-dependencies-update.sh
+
 .PHONY: update-kubernetes-yaml
 update-kubernetes-yaml: ## Regenerate the Kubernetes YAML config
+update-kubernetes-yaml: helm-dependencies-update
 	${MAYBE_ENVIRONMENT_EXEC} ./scripts/kubernetes-yaml.sh update
 
 .PHONY: cargo-install-%
