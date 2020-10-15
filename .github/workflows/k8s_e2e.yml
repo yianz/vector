@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - master
+      - minikube-update
     paths:
       - ".github/workflows/k8s_e2e.yml"
       - ".cargo/**"
