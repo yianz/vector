@@ -49,7 +49,7 @@ _values: {
 		// For example, "AWS" is a service provider for many services, and
 		// a user on AWS can use this to filter for AWS supported
 		// components.
-		service_providers: [...string]
+		service_providers: [...string] | *[]
 	}
 }
 
@@ -281,7 +281,7 @@ _values: {
 			enabled: bool
 		})
 
-		exposes?: close({})
+		exposes?: #FeaturesExpose
 		send?:    #FeaturesSend & {_args: Args}
 	}
 }
@@ -303,6 +303,10 @@ _values: {
 		url:      string
 		versions: string | null
 	})
+}
+
+#FeaturesExpose: {
+	for: #Service
 }
 
 #FeaturesParse: {
